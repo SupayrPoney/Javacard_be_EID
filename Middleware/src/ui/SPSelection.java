@@ -1,6 +1,5 @@
 package ui;
 
-import java.awt.BorderLayout;
 import java.awt.EventQueue;
 
 import javax.swing.JFrame;
@@ -9,28 +8,23 @@ import javax.swing.border.EmptyBorder;
 import java.awt.GridLayout;
 import javax.swing.JLabel;
 import javax.swing.SwingConstants;
-import javax.swing.JList;
 import javax.swing.JButton;
 import java.awt.GridBagLayout;
 import java.awt.GridBagConstraints;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Set;
-import java.awt.FlowLayout;
-import javax.swing.JMenuBar;
-import javax.swing.AbstractListModel;
 import javax.swing.JComboBox;
 import javax.swing.DefaultComboBoxModel;
-import javax.swing.BoxLayout;
-import java.awt.CardLayout;
-import javax.swing.GroupLayout;
-import javax.swing.GroupLayout.Alignment;
 
 public class SPSelection extends JFrame {
 
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 1L;
 	private JPanel contentPane;
 
 	/**
@@ -95,12 +89,12 @@ public class SPSelection extends JFrame {
 		JLabel lblDomain = new JLabel("Domain");
 		panel_2.add(lblDomain);
 		
-		final JComboBox<String> comboBox = new JComboBox();
+		final JComboBox<String> comboBox = new JComboBox<String>();
 		Set<String> keys = services.keySet();
 		comboBox.setModel(new DefaultComboBoxModel<String>(keys.toArray(new String[keys.size()])));
 		comboBox.setSelectedIndex(0);
 		JLabel lblService = new JLabel("Service");
-		final JComboBox comboBox_1 = new JComboBox();
+		final JComboBox<String> comboBox_1 = new JComboBox<String>();
 		String selectedDomain = (String) comboBox.getSelectedItem();
 		String[] selectedServices = services.get(selectedDomain);
 		comboBox_1.setModel(new DefaultComboBoxModel<String>(selectedServices));

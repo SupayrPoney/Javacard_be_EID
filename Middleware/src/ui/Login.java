@@ -1,6 +1,5 @@
 package ui;
 
-import java.awt.BorderLayout;
 import java.awt.EventQueue;
 
 import javax.swing.JFrame;
@@ -13,18 +12,17 @@ import java.awt.event.ActionListener;
 import java.awt.event.ActionEvent;
 import javax.swing.SwingConstants;
 import java.awt.FlowLayout;
-import java.awt.CardLayout;
 import javax.swing.JLabel;
-import javax.swing.GroupLayout;
-import javax.swing.GroupLayout.Alignment;
-import java.awt.GridBagLayout;
-import java.awt.GridBagConstraints;
-import java.awt.Insets;
 import java.awt.Color;
 import java.awt.Font;
 
 public class Login extends JFrame {
 
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 1L;
+	
 	private JPanel contentPane;
 	private JTextField txtLogin;
 	private JTextField txtPassword;
@@ -69,7 +67,6 @@ public class Login extends JFrame {
 		
 		JPanel panel_3 = new JPanel();
 		panel_3.setForeground(Color.WHITE);
-		FlowLayout flowLayout = (FlowLayout) panel_3.getLayout();
 		panel_2.add(panel_3);
 		
 		JPanel panel_4 = new JPanel();
