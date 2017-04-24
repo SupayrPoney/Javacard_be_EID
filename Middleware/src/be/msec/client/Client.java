@@ -4,20 +4,28 @@ import be.msec.client.connection.Connection;
 import be.msec.client.connection.IConnection;
 import be.msec.client.connection.SimulatedConnection;
 
+import java.util.Arrays;
+
 import javax.smartcardio.*;
 
 public class Client {
 
 	private final static byte IDENTITY_CARD_CLA =(byte)0x80;
 	private static final byte VALIDATE_PIN_INS = 0x22;
+	private static final byte GET_SERIAL_INS = 0x24;
+	private static final byte SIGN_DATA = 0x26;
+	private static final byte UPDATE_TIME = 0x28;
+	
 	private final static short SW_VERIFICATION_FAILED = 0x6300;
 	private final static short SW_PIN_VERIFICATION_REQUIRED = 0x6301;
+	
+	
 	/**
 	 * @param args
 	 */
 	public static void main(String[] args) throws Exception {
 		IConnection c;
-		boolean simulation = false;		// Choose simulation vs real card here
+		boolean simulation = true;		// Choose simulation vs real card here
 
 		if (simulation) {
 			//Simulation:
@@ -63,13 +71,17 @@ public class Client {
 			}
 			
 			//2. Send PIN
-			a = new CommandAPDU(IDENTITY_CARD_CLA, VALIDATE_PIN_INS, 0x00, 0x00,new byte[]{0x01,0x02,0x03,0x04});
+			a = new CommandAPDU(IDENTITY_CARD_CLA, UPDATE_TIME, 0x00, 0x00,new byte[]{0x01,0x02,0x03,0x04,0x05});
+			byte[] dataIn = Arrays.copyOfRange(a.getBytes(), 5, 9); 
+			System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(dataIn));
 			r = c.transmit(a);
+			
+			byte[] dataOut = Arrays.copyOfRange(r.getBytes(), 5, 9); 
 
-			System.out.println(r);
-			if (r.getSW()==SW_VERIFICATION_FAILED) throw new Exception("PIN INVALID");
-			else if(r.getSW()!=0x9000) throw new Exception("Exception on the card: " + r.getSW());
-			System.out.println("PIN Verified");
+			System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(dataOut));
+//			if (r.getSW()==SW_VERIFICATION_FAILED) throw new Exception("PIN INVALID");
+//			else if(r.getSW()!=0x9000) throw new Exception("Exception on the card: " + r.getSW());
+//			System.out.println("PIN Verified");
 			
 		} catch (Exception e) {
 			throw e;
