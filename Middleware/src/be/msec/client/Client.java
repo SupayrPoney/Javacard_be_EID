@@ -71,12 +71,13 @@ public class Client {
 			}
 			
 			//2. Send PIN
+			int dataLen = 5;
 			a = new CommandAPDU(IDENTITY_CARD_CLA, UPDATE_TIME, 0x00, 0x00,new byte[]{0x01,0x02,0x03,0x04,0x05});
-			byte[] dataIn = Arrays.copyOfRange(a.getBytes(), 5, 9); 
+			byte[] dataIn = Arrays.copyOfRange(a.getBytes(), 0x05, 5 + dataLen); 
 			System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(dataIn));
 			r = c.transmit(a);
 			
-			byte[] dataOut = Arrays.copyOfRange(r.getBytes(), 5, 9); 
+			byte[] dataOut = Arrays.copyOfRange(r.getBytes(), 5, 5 + dataLen); 
 
 			System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(dataOut));
 //			if (r.getSW()==SW_VERIFICATION_FAILED) throw new Exception("PIN INVALID");
