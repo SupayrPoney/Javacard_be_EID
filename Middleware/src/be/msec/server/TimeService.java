@@ -13,6 +13,9 @@ import java.security.KeyStore;
 import java.security.MessageDigest;
 import java.security.PrivateKey;
 import java.security.Signature;
+import java.security.cert.Certificate;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.interfaces.RSAPublicKey;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Date;
@@ -29,7 +32,10 @@ public class TimeService {
 		keyStore.load(fis, "ThisIs4V3ryS4f3Pa$$w0rd".toCharArray());
 		fis.close();
 
-		PrivateKey timestampPrivateKey = (PrivateKey) keyStore.getKey("timestamp", "test".toCharArray());
+		RSAPrivateKey timestampPrivateKey = (RSAPrivateKey) keyStore.getKey("timestamp", "test".toCharArray());
+
+		Certificate cert = keyStore.getCertificate("timestamp");
+		RSAPublicKey pubKey = (RSAPublicKey) cert.getPublicKey();
 
         while(true) {
         	System.out.println("Waiting");
@@ -64,8 +70,12 @@ public class TimeService {
 					Signature signEngine = Signature.getInstance("SHA256withRSA");
 					signEngine.initSign(timestampPrivateKey);
 					signEngine.update(hashedTime);
+					System.out.println("MODULUS:" + pubKey.getModulus());
+					System.out.println("EXPONENT:" + pubKey.getPublicExponent());
+//					System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(timeBytes));
 
 					byte[] signature = signEngine.sign();
+//					System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(signature));
 					int length = signature.length + timeBytes.length + 4;
 					byte[] lenBytes = ByteBuffer.allocate(4).putInt(length).array();
 					byte[] output = new byte[length];
