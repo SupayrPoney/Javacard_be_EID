@@ -30,6 +30,7 @@ public class Client {
 	private static final byte SIGN_DATA = 0x26;
 	private static final byte ECHO = 0x28;
 	private static final byte VALIDATE_TIME = 0x30;
+	private static final byte AUTHENTICATE_SP = 0x32;
 	
 	private final static short SW_VERIFICATION_FAILED = 0x6300;
 	private final static short SW_PIN_VERIFICATION_REQUIRED = 0x6301;
@@ -51,6 +52,7 @@ public class Client {
 	        length[1] = (byte) dIn.read();
 	        length[2] = (byte) dIn.read();
 	        length[3] = (byte) dIn.read();
+	        //from four bytes to an int
 	        int len = length[0] << 24 | (length[1] & 0xFF) << 16 | (length[2] & 0xFF) << 8 | (length[3] & 0xFF);
 	        byte[] message = null;// read length of incoming message
 	        
@@ -64,11 +66,47 @@ public class Client {
 	        clientSocket.close();
 		}
 		
-		
 		// authenticateSP
+		 Socket clientSocketSP = new Socket("localhost", 8080);
+		 DataOutputStream outToServer = new DataOutputStream(clientSocketSP.getOutputStream());
+	     DataInputStream dIn = new DataInputStream(clientSocketSP.getInputStream());
+	     
+	     byte[] length = new byte[4];
+	        length[0] = (byte) dIn.read(); 
+	        length[1] = (byte) dIn.read();
+	        length[2] = (byte) dIn.read();
+	        length[3] = (byte) dIn.read();
+	        //from four bytes to an int
+	        int len = length[0] << 24 | (length[1] & 0xFF) << 16 | (length[2] & 0xFF) << 8 | (length[3] & 0xFF);
+	        byte[] message = null;// read length of incoming message
+	        int command = (int)((byte) dIn.read());
+
+	        if((len - 1)>0) {
+	        	System.out.println(len);
+	            message = new byte[(len -1)];
+	            dIn.readFully(message, 0, message.length); // read the message
+	        }
+	        
+	        switch(command){
+	        case 1: 
+	        	verify_certificate(message, c);
+	        
+	        }
+		 
+		
+		
+
 		// authenticateCard
 		// releaseAttributes
 	}
+	
+	private static void verify_certificate(byte[] message, IConnection c) throws Exception{
+		CommandAPDU a = new CommandAPDU(IDENTITY_CARD_CLA, AUTHENTICATE_SP, 0x00, 0x00, message);
+		ResponseAPDU r= c.transmit(a);
+		
+		
+	}
+	
 	private static boolean validate_Time(CommandAPDU a, ResponseAPDU r, IConnection c) throws Exception {
 		// TODO Auto-generated method stub
 		int dataLen = 8;
@@ -83,11 +121,11 @@ public class Client {
 		dateBytes[7] = (byte) currentTimeDate.getMinute();
 		a = new CommandAPDU(IDENTITY_CARD_CLA, VALIDATE_TIME, 0x00, 0x00,dateBytes);
 		byte[] dataIn = Arrays.copyOfRange(a.getBytes(), 0x05, 5 + 100); 
-		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(dataIn));
+	//	System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(dataIn));
 		r = c.transmit(a);
-		byte[] date = Arrays.copyOfRange(dataIn, (short)0x00, (short)4);
-		int b = date[0] << 24 | (date[1] & 0xFF) << 16 | (date[2] & 0xFF) << 8 | (date[3] & 0xFF);
-		System.out.println(b);
+	//	byte[] date = Arrays.copyOfRange(dataIn, (short)0x00, (short)4);
+	//	int b = date[0] << 24 | (date[1] & 0xFF) << 16 | (date[2] & 0xFF) << 8 | (date[3] & 0xFF);
+	//	System.out.println(b);
 		
 		byte[] dataOut = Arrays.copyOfRange(r.getData(),(short) 5 + dataLen, 5 + dataLen+1); 
 		int response = dataOut[0];

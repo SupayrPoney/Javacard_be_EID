@@ -24,7 +24,7 @@ public class TimeService {
 		// TODO Reconstruct key
         ServerSocket welcomeSocket = new ServerSocket(8000);
 		KeyStore keyStore = KeyStore.getInstance("JKS");
-		String fileName = "/home/supayrponey/Cours/2016-2017/SecurityInComputing/Project/project.jks";
+		String fileName = "/Users/Silke/Documents/workspaces/neon/project.jks";
 		FileInputStream fis = new FileInputStream(fileName);
 		keyStore.load(fis, "ThisIs4V3ryS4f3Pa$$w0rd".toCharArray());
 		fis.close();
