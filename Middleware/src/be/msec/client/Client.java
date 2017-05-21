@@ -30,13 +30,17 @@ public class Client {
 	private static final byte SIGN_DATA = 0x26;
 	private static final byte ECHO = 0x28;
 	private static final byte VALIDATE_TIME = 0x30;
+	private static final byte VERIFY_TIME_SIG = 0x32;
 	
 	private final static short SW_VERIFICATION_FAILED = 0x6300;
 	private final static short SW_PIN_VERIFICATION_REQUIRED = 0x6301;
 	
+	private final static short SIZE_OF_INT_IN_BYTES = 4;
+	
 
 	
 	private static void authenticate(CommandAPDU a, ResponseAPDU r, IConnection c) throws Exception{
+		int response = 0;
 		if (!validate_Time(a, r, c)){
 			System.out.println("NEED VALIDATION");
 	        BufferedReader inFromUser = new BufferedReader(new InputStreamReader(System.in));
@@ -46,22 +50,34 @@ public class Client {
 	        DataInputStream dIn = new DataInputStream(clientSocket.getInputStream());
 	        outToServer.writeByte(1);
 	        
+	        byte[] message = null;// read length of incoming message
+	        //4 bytes for len, 8 for date, rest for sign
 	        byte[] length = new byte[4];
 	        length[0] = (byte) dIn.read(); 
 	        length[1] = (byte) dIn.read();
 	        length[2] = (byte) dIn.read();
 	        length[3] = (byte) dIn.read();
 	        int len = length[0] << 24 | (length[1] & 0xFF) << 16 | (length[2] & 0xFF) << 8 | (length[3] & 0xFF);
-	        byte[] message = null;// read length of incoming message
-	        
 	        if(len>0) {
 	        	System.out.println(len);
-	            message = new byte[len];
+	            message = new byte[len - SIZE_OF_INT_IN_BYTES];
+	        	System.out.println(message.length);
 	            dIn.readFully(message, 0, message.length); // read the message
+	        	System.out.println(len);
 	        }
+	        byte[] toSend = new byte[len];
+	        System.arraycopy(length, 0, toSend, 0, SIZE_OF_INT_IN_BYTES);
+	        System.arraycopy(message, 0, toSend, SIZE_OF_INT_IN_BYTES, len - SIZE_OF_INT_IN_BYTES);
 	        System.out.println(message.length + " bytes read.");
 	        
 	        clientSocket.close();
+	        System.out.println("Sending to card");
+			a = new CommandAPDU(IDENTITY_CARD_CLA, VERIFY_TIME_SIG, 0x00, 0x00,toSend);
+			r = c.transmit(a);
+			byte[] dataOut = Arrays.copyOfRange(r.getData(),(short) 5 + len, 5 + len+1); 
+			response = dataOut[0];			
+		}
+		if (response == 1) {
 		}
 		
 		
