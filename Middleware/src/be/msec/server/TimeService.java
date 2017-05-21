@@ -3,6 +3,7 @@ package be.msec.server;
 import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -27,8 +28,7 @@ public class TimeService {
 		// TODO Reconstruct key
         ServerSocket welcomeSocket = new ServerSocket(8000);
 		KeyStore keyStore = KeyStore.getInstance("JKS");
-		String fileName = "/Users/Silke/Documents/workspaces/neon/project.jks";
-		FileInputStream fis = new FileInputStream(fileName);
+		FileInputStream fis = new FileInputStream(new File("project.jks").getAbsolutePath());
 		keyStore.load(fis, "ThisIs4V3ryS4f3Pa$$w0rd".toCharArray());
 		fis.close();
 
