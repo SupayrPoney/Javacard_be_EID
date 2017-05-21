@@ -1,6 +1,9 @@
 package be.msec.smartcard;
 
 import java.math.BigInteger;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 import javacard.framework.APDU;
 import javacard.framework.Applet;
@@ -23,7 +26,8 @@ public class IdentityCard extends Applet {
 	private static final byte VALIDATE_PIN_INS = 0x22;
 	private static final byte GET_SERIAL_INS = 0x24;
 	private static final byte SIGN_DATA = 0x26;
-	private static final byte UPDATE_TIME = 0x28;
+	private static final byte ECHO = 0x28;
+	private static final byte VALIDATE_TIME = 0x30;
 	
 	private final static byte PIN_TRY_LIMIT =(byte)0x03;
 	private final static byte PIN_SIZE =(byte)0x04;
@@ -40,10 +44,16 @@ public class IdentityCard extends Applet {
 	private String govTimePublicExponent = "65537";
 	private String govTimePublicModulus = "7615538731625267295662549109333519945267947283726396806643436348704388298950354538429913118402429549367126946884389145577506962581434883709177615141122583";
 	//CHECK HERE IF IT'S CORRECT
+	int[] timeRatios = {525600, 1440, };
+	
+	private String[] lastValidationTime = {"2017","05","01","15","06"};
+	
+	private String[] deltaValidation = {"0","0","1","0","0"};
 	
 	
 	private OwnerPIN pin;
-	private byte[] storage = new byte[]{0x30, 0x35, 0x37, 0x36,0x04};
+	private byte[] storage = new byte[]{0x30, 0x35, 0x37, 0x36, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04};
+	private byte[] byteToInt = new byte[]{0x00,0x00,0x00,0x00, 0x04, 0x04};
 	
 	//TODO nymu,SP - hash(UserID ++ hash(cerificate_SP))
 	private String name;
@@ -84,6 +94,53 @@ public class IdentityCard extends Applet {
 		new IdentityCard();
 	}
 	
+	private void validate_time(APDU apdu){
+		System.out.println("Validate");
+		byte[] buffer = apdu.getBuffer();
+		short bytesLeft = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
+		short START = 0;
+		Util.arrayCopy(buffer, START, storage, START, (short)8);
+		short readCount = apdu.setIncomingAndReceive();
+		short i = 0;
+		while ( bytesLeft > 0){
+			
+			Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, storage, i, readCount);
+			bytesLeft -= readCount;
+			i+=readCount;
+			readCount = apdu.receiveBytes(ISO7816.OFFSET_CDATA);
+		}
+		
+		Util.arrayCopy(storage, (short)0x00, byteToInt,(short) 0x00, (short)4);
+		String year = Integer.toString(byteToInt[0] << 24 | (byteToInt[1] & 0xFF) << 16 | (byteToInt[2] & 0xFF) << 8 | (byteToInt[3] & 0xFF));
+		String month = Integer.toString((int)storage[5]);
+		String day = Integer.toString((int)storage[6]);
+		String hour = Integer.toString((int)storage[7]);
+		String min = Integer.toString((int)storage[8]);
+		String currentTimeString = String.join("-", new String[]{year,month,day,hour, min});
+		
+		String lastValidationString = String.join("-", lastValidationTime);
+		
+		SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd-HH-mm");
+		
+		try {
+			Date currentDate = format.parse(currentTimeString);
+			Date lastValidationDate = format.parse(lastValidationString);
+			System.out.println((currentDate.getTime() - lastValidationDate.getTime())/(1000*60*60*24));
+			if((currentDate.getTime() - lastValidationDate.getTime())/(1000*60*60*24) > 1){
+				apdu.setOutgoing();
+				apdu.setOutgoingLength((short)1);
+				Util.setShort(buffer,(short) 0, (short) 1);
+				apdu.sendBytes((short) 0x00,(short)1);
+				
+			}
+			else {
+				
+			}
+		} catch (ParseException e) {
+			// TODO Auto-generated catch block
+		}
+	}
+	
 	/*
 	 * If no tries are remaining, the applet refuses selection.
 	 * The card can, therefore, no longer be used for identification.
@@ -91,6 +148,7 @@ public class IdentityCard extends Applet {
 	public boolean select() {
 		if (pin.getTriesRemaining()==0)
 			return false;
+		
 		return true;
 	}
 
@@ -118,8 +176,11 @@ public class IdentityCard extends Applet {
 		case SIGN_DATA:
 			sign_data(apdu);
 			break;
-		case UPDATE_TIME:
-			update_time(apdu);
+		case ECHO:
+			echo(apdu);
+			break;
+		case VALIDATE_TIME:
+			validate_time(apdu);
 			break;
 			
 		//If no matching instructions are found it is indicated in the status word of the response.
@@ -128,12 +189,15 @@ public class IdentityCard extends Applet {
 		default: ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
 		}
 	}
+
 	
-	private void update_time(APDU apdu){
+	
+	private void echo(APDU apdu){
+		System.out.println("Echo");
 		byte[] buffer = apdu.getBuffer();
 		short bytesLeft = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
 		short START = 0;
-		Util.arrayCopy(buffer, START, storage, START, (short)5);
+		Util.arrayCopy(buffer, START, storage, START, (short)8);
 		short readCount = apdu.setIncomingAndReceive();
 		short i = ISO7816.OFFSET_CDATA;
 		while ( bytesLeft > 0){
@@ -149,13 +213,7 @@ public class IdentityCard extends Applet {
 		 
 	}
 	
-	private void authenticate(APDU apdu){
-		// updateTime
-		
-		// authenticateSP
-		// authenticateCard
-		// releaseAttributes
-	}
+
 	
 	private void sign_data(APDU apdu) {
 		if(!pin.isValidated()){
