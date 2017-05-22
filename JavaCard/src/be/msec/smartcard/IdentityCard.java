@@ -215,8 +215,10 @@ public class IdentityCard extends Applet {
 			Date timeDate = format.parse(timeString);
 			Date lastValidationDate = format.parse(lastValidationString);
 			short response = 1;
-			if(!verifies || (timeDate.getTime() > lastValidationDate.getTime())){
-				response = 1;
+			if(verifies || (timeDate.getTime() > lastValidationDate.getTime())){
+				response = 0;
+			}
+			else{
 				lastValidationTime = new String[]{year,month,day,hour, min};
 			}
 			apdu.setOutgoing();

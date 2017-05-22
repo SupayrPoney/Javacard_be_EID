@@ -81,6 +81,7 @@ public class Client {
 			response = dataOut[0];			
 		}
 		if (response == 1) {
+			System.out.println("SUCCESS");
 		}
 		
 		// authenticateSP
