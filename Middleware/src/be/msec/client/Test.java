@@ -6,47 +6,76 @@ import java.awt.EventQueue;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.border.EmptyBorder;
+
+import helpers.Certificate;
+
 import javax.swing.JButton;
 import java.awt.event.ActionListener;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.math.BigInteger;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Arrays;
 import java.awt.event.ActionEvent;
 
-public class Test extends JFrame {
+public class Test {
 
-	private JPanel contentPane;
+	public static Certificate restoreCert(String name) {
+
+        Certificate deserializedCert = null;
+        FileInputStream inputFileStream;
+		try {
+			inputFileStream = new FileInputStream("certs/" + name + ".crt");
+	        ObjectInputStream objectInputStream = new ObjectInputStream(inputFileStream);
+	        deserializedCert= (Certificate)objectInputStream.readObject();
+		} catch (FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (ClassNotFoundException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+        return deserializedCert;
+	}
 
 	/**
 	 * Launch the application.
 	 */
 	public static void main(String[] args) {
-		EventQueue.invokeLater(new Runnable() {
-			public void run() {
-				try {
-					Test frame = new Test();
-					frame.setVisible(true);
-				} catch (Exception e) {
-					e.printStackTrace();
-				}
-			}
-		});
-	}
+		byte[] sign = new byte[8];
+		String[] fromDate = {"2017", "05", "25", "09", "44"};
+		String[] toDate = {"2018", "05", "25", "09", "44"};
+		String subject = "timestamp";
+		Certificate cert= new Certificate(subject, subject, new BigInteger("7069442399809149374049602182035905118617463308097239483861495753479385489754469537665461584246377137057227306597598925117748461915260386529575906451435569"), 
+				new BigInteger("65537"), sign, fromDate, toDate);
 
-	/**
-	 * Create the frame.
-	 */
-	public Test() {
-		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-		setBounds(100, 100, 450, 300);
-		contentPane = new JPanel();
-		contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
-		contentPane.setLayout(new BorderLayout(0, 0));
-		setContentPane(contentPane);
 		
-		JButton btnNewButton = new JButton("New button");
-		btnNewButton.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent e) {
-			}
-		});
-		contentPane.add(btnNewButton, BorderLayout.CENTER);
+        Path path = Paths.get("signatures/" + subject + ".sig");
+        byte[] data = null;
+        try {
+			data = Files.readAllBytes(path);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+        cert.setSignature(data);
+		cert.save();
+		
+		Certificate deserCert = restoreCert(subject);
+		
+		System.out.println(Arrays.equals(deserCert.getSignature(),data));
+
+	      
 	}
 
 }
