@@ -58,7 +58,7 @@ public class ServiceProvider extends Thread{
 		}
 		
 		try {
-			welcomeSocket = new ServerSocket(8080);
+			welcomeSocket = new ServerSocket(9999);
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -92,15 +92,17 @@ public class ServiceProvider extends Thread{
 			}
 			
 			//we convert "AuthenticateSp + cetSP to bytes in order to sent them
-			byte command = (byte) 1;
+			byte[] command = {0x01};
 			int length = 1 + certificatebytes.length + 4;
 			byte[] lenBytes = ByteBuffer.allocate(4).putInt(length).array();
 			byte[] output = new byte[length];
 			System.arraycopy(lenBytes, 0, output, 0, lenBytes.length);
 			System.arraycopy(command, 0, output, lenBytes.length, 1);
 			System.arraycopy(certificatebytes, 0, output, 1 + lenBytes.length, certificatebytes.length);
+			System.out.println(output.length);
 			try {
 				outToClient.write(output);
+				System.out.println("Sent to client!");
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
