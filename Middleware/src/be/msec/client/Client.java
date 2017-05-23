@@ -94,11 +94,11 @@ public class Client {
 		        //from four bytes to an int
 		        int len = length[0] << 24 | (length[1] & 0xFF) << 16 | (length[2] & 0xFF) << 8 | (length[3] & 0xFF);
 		        byte[] message = null;// read length of incoming message
-		        int command = dIn.readInt();
+		        int command = (int) dIn.read();
 
 		        if((len - 1)>0) {
 		        	System.out.println(len);
-		            message = new byte[len-1];
+		            message = new byte[len - 5];
 		            dIn.readFully(message); // read the message
 		        }
 		        System.out.println(command);
