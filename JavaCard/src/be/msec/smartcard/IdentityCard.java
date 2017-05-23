@@ -1,5 +1,8 @@
 package be.msec.smartcard;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
 import java.math.BigInteger;
 import java.security.InvalidKeyException;
 import java.security.KeyFactory;
@@ -8,6 +11,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.security.Signature;
 import java.security.SignatureException;
+import java.security.cert.Certificate;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.RSAPublicKeySpec;
@@ -16,6 +20,7 @@ import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
 
+import helpers.HomeMadeCertificate;
 import javacard.framework.APDU;
 import javacard.framework.Applet;
 import javacard.framework.ISO7816;
@@ -252,12 +257,20 @@ public class IdentityCard extends Applet {
 			readCount = apdu.receiveBytes(ISO7816.OFFSET_CDATA);
 		}
 		
-		String certificateString = new String(bigStorage);
-		String[] certificate = certificateString.split(",");
-		String signature = certificate[SIGNATURE];
-		String beginDate = certificate[START_DATE];
-		String endDate = certificate[END_DATE];
+		HomeMadeCertificate certificate =null;
+	    ByteArrayInputStream in = new ByteArrayInputStream(bigStorage);
+	    ObjectInputStream is;
+		try {
+			is = new ObjectInputStream(in);
+			certificate = (HomeMadeCertificate) is.readObject();
+		} catch (IOException e) {
+		} catch (ClassNotFoundException e) {
+
+		}
+		System.out.println(certificate.getIssuer());
+	    
 		
+
 		
 		
 		

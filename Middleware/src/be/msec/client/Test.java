@@ -7,7 +7,7 @@ import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.border.EmptyBorder;
 
-import helpers.Certificate;
+import helpers.HomeMadeCertificate;
 
 import javax.swing.JButton;
 import java.awt.event.ActionListener;
@@ -26,14 +26,14 @@ import java.awt.event.ActionEvent;
 
 public class Test {
 
-	public static Certificate restoreCert(String name) {
+	public static HomeMadeCertificate restoreCert(String name) {
 
-        Certificate deserializedCert = null;
+        HomeMadeCertificate deserializedCert = null;
         FileInputStream inputFileStream;
 		try {
 			inputFileStream = new FileInputStream("certs/" + name + ".crt");
 	        ObjectInputStream objectInputStream = new ObjectInputStream(inputFileStream);
-	        deserializedCert= (Certificate)objectInputStream.readObject();
+	        deserializedCert= (HomeMadeCertificate)objectInputStream.readObject();
 		} catch (FileNotFoundException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -55,7 +55,7 @@ public class Test {
 		String[] fromDate = {"2017", "05", "25", "09", "44"};
 		String[] toDate = {"2018", "05", "25", "09", "44"};
 		String subject = "timestamp";
-		Certificate cert= new Certificate(subject, subject, new BigInteger("7069442399809149374049602182035905118617463308097239483861495753479385489754469537665461584246377137057227306597598925117748461915260386529575906451435569"), 
+		HomeMadeCertificate cert= new HomeMadeCertificate(subject, subject, new BigInteger("7069442399809149374049602182035905118617463308097239483861495753479385489754469537665461584246377137057227306597598925117748461915260386529575906451435569"), 
 				new BigInteger("65537"), sign, fromDate, toDate);
 
 		
@@ -71,7 +71,7 @@ public class Test {
         cert.setSignature(data);
 		cert.save();
 		
-		Certificate deserCert = restoreCert(subject);
+		HomeMadeCertificate deserCert = restoreCert(subject);
 		
 		System.out.println(Arrays.equals(deserCert.getSignature(),data));
 

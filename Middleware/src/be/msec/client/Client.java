@@ -81,35 +81,36 @@ public class Client {
 		}
 		if (response == 1) {
 			System.out.println("SUCCESS");
+			// authenticateSP
+			 Socket clientSocketSP = new Socket("localhost", 8080);
+			 DataOutputStream outToServer = new DataOutputStream(clientSocketSP.getOutputStream());
+		     DataInputStream dIn = new DataInputStream(clientSocketSP.getInputStream());
+		     
+		     byte[] length = new byte[4];
+		        length[0] = (byte) dIn.read(); 
+		        length[1] = (byte) dIn.read();
+		        length[2] = (byte) dIn.read();
+		        length[3] = (byte) dIn.read();
+		        //from four bytes to an int
+		        int len = length[0] << 24 | (length[1] & 0xFF) << 16 | (length[2] & 0xFF) << 8 | (length[3] & 0xFF);
+		        byte[] message = null;// read length of incoming message
+		        int command = (int) dIn.read();
+
+		        if((len - 1)>0) {
+		        	System.out.println(len);
+		            message = new byte[(len -1)];
+		            dIn.readFully(message, 0, message.length); // read the message
+		        }
+		        
+		        switch(command){
+		        case 1: 
+		        	verify_certificate(message, c);
+		        
+		        }
+			 
 		}
 		
-		// authenticateSP
-		 Socket clientSocketSP = new Socket("localhost", 8080);
-		 DataOutputStream outToServer = new DataOutputStream(clientSocketSP.getOutputStream());
-	     DataInputStream dIn = new DataInputStream(clientSocketSP.getInputStream());
-	     
-	     byte[] length = new byte[4];
-	        length[0] = (byte) dIn.read(); 
-	        length[1] = (byte) dIn.read();
-	        length[2] = (byte) dIn.read();
-	        length[3] = (byte) dIn.read();
-	        //from four bytes to an int
-	        int len = length[0] << 24 | (length[1] & 0xFF) << 16 | (length[2] & 0xFF) << 8 | (length[3] & 0xFF);
-	        byte[] message = null;// read length of incoming message
-	        int command = (int)((byte) dIn.read());
-
-	        if((len - 1)>0) {
-	        	System.out.println(len);
-	            message = new byte[(len -1)];
-	            dIn.readFully(message, 0, message.length); // read the message
-	        }
-	        
-	        switch(command){
-	        case 1: 
-	        	verify_certificate(message, c);
-	        
-	        }
-		 
+		
 		
 		
 
