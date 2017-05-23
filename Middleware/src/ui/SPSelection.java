@@ -5,6 +5,9 @@ import java.awt.EventQueue;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.border.EmptyBorder;
+
+import be.msec.server.ServiceProvider;
+
 import java.awt.GridLayout;
 import javax.swing.JLabel;
 import javax.swing.SwingConstants;
@@ -18,6 +21,8 @@ import java.util.HashMap;
 import java.util.Set;
 import javax.swing.JComboBox;
 import javax.swing.DefaultComboBoxModel;
+import javax.swing.AbstractAction;
+import javax.swing.Action;
 
 public class SPSelection extends JFrame {
 
@@ -26,6 +31,9 @@ public class SPSelection extends JFrame {
 	 */
 	private static final long serialVersionUID = 1L;
 	private JPanel contentPane;
+	JLabel lblDomain = new JLabel("Domain");
+	JButton btnNewButton = new JButton("Select Service");
+	final JComboBox<String> comboBox_1 = new JComboBox<String>();
 
 	/**
 	 * Launch the application.
@@ -35,7 +43,7 @@ public class SPSelection extends JFrame {
 			public void run() {
 				try {
 					HashMap<String, String[]> allServices = new HashMap<String, String[]>();
-					allServices.put("eGov", new String[]{"serviceGov1","serviceGov2"});
+					allServices.put("eGov", new String[]{"eGov1","eGov2"});
 					allServices.put("SocNet", new String[]{"serviceSocNet1","serviceSocNet2"});
 					allServices.put("default", new String[]{"serviceDefault1","serviceDefault2"});
 					allServices.put("health", new String[]{"healthService1","healthService2"});
@@ -87,7 +95,6 @@ public class SPSelection extends JFrame {
 		contentPane.add(panel_2, gbc_panel_2);
 		panel_2.setLayout(new GridLayout(0, 2, 0, 0));
 		
-		JLabel lblDomain = new JLabel("Domain");
 		panel_2.add(lblDomain);
 		
 		final JComboBox<String> comboBox = new JComboBox<String>();
@@ -95,7 +102,6 @@ public class SPSelection extends JFrame {
 		comboBox.setModel(new DefaultComboBoxModel<String>(keys.toArray(new String[keys.size()])));
 		comboBox.setSelectedIndex(0);
 		JLabel lblService = new JLabel("Service");
-		final JComboBox<String> comboBox_1 = new JComboBox<String>();
 		String selectedDomain = (String) comboBox.getSelectedItem();
 		String[] selectedServices = services.get(selectedDomain);
 		comboBox_1.setModel(new DefaultComboBoxModel<String>(selectedServices));
@@ -123,11 +129,23 @@ public class SPSelection extends JFrame {
 		contentPane.add(panel_1, gbc_panel_1);
 		panel_1.setLayout(new GridLayout(0, 1, 0, 0));
 		
-		JButton btnNewButton = new JButton("Select Service");
+		btnNewButton.addActionListener(new ActionListener() {
+			
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				try {
+					System.out.println((String) comboBox_1.getSelectedItem());
+					ServiceProvider SP = new ServiceProvider((String) comboBox_1.getSelectedItem());
+					btnNewButton.setEnabled(false);
+					SP.start();
+				} catch (Exception e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				}
+				
+			}
+		});
 		panel_1.add(btnNewButton);
 		
-		JButton btnNewButton_1 = new JButton("New button");
-		panel_1.add(btnNewButton_1);
 	}
-
 }
