@@ -30,9 +30,8 @@ public class Client {
 	private static final byte SIGN_DATA = 0x26;
 	private static final byte ECHO = 0x28;
 	private static final byte VALIDATE_TIME = 0x30;
-	private static final byte AUTHENTICATE_SP = 0x34;
 	private static final byte VERIFY_TIME_SIG = 0x32;
-
+	private static final byte AUTHENTICATE_SP = 0x34;
 	
 	private final static short SW_VERIFICATION_FAILED = 0x6300;
 	private final static short SW_PIN_VERIFICATION_REQUIRED = 0x6301;

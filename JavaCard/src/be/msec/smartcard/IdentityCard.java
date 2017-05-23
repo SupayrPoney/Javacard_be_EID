@@ -13,6 +13,7 @@ import java.security.spec.InvalidKeySpecException;
 import java.security.spec.RSAPublicKeySpec;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Date;
 
 import javacard.framework.APDU;
@@ -39,6 +40,7 @@ public class IdentityCard extends Applet {
 	private static final byte ECHO = 0x28;
 	private static final byte VALIDATE_TIME = 0x30;
 	private static final byte VERIFY_TIME_SIG = 0x32;
+	private static final byte AUTHENTICATE_SP = 0x34;
 	
 	private final static byte PIN_TRY_LIMIT =(byte)0x03;
 	private final static byte PIN_SIZE =(byte)0x04;
@@ -230,6 +232,39 @@ public class IdentityCard extends Applet {
 
 		
 	}
+	
+	
+	private void authenticate_sp(APDU apdu){
+		Arrays.fill(bigStorage, (byte) 0);
+		byte[] buffer = apdu.getBuffer();
+		short bytesLeft = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
+		short START = 0;
+		Util.arrayCopy(buffer, START, bigStorage, START, (short)8);
+		short readCount = apdu.setIncomingAndReceive();
+		short i = 0;
+		while ( bytesLeft > 0){
+			
+			Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, bigStorage, i, readCount);
+			bytesLeft -= readCount;
+			i+=readCount;
+			readCount = apdu.receiveBytes(ISO7816.OFFSET_CDATA);
+		}
+		
+		String certificateString = new String(bigStorage);
+		String[] certificate = certificateString.split(",");
+		String signature = certificate[SIGNATURE];
+		String beginDate = certificate[START_DATE];
+		String endDate = certificate[END_DATE];
+		
+		
+		
+		
+		
+	}
+	
+	
+	
+	
 	/*
 	 * If no tries are remaining, the applet refuses selection.
 	 * The card can, therefore, no longer be used for identification.
@@ -276,6 +311,8 @@ public class IdentityCard extends Applet {
 				verify_time_signature(apdu);
 			} catch (Exception e) {}
 			break;
+		case AUTHENTICATE_SP: 
+			authenticate_sp(apdu);
 			
 		//If no matching instructions are found it is indicated in the status word of the response.
 		//This can be done by using this method. As an argument a short is given that indicates
