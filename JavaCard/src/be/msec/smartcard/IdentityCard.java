@@ -59,6 +59,7 @@ public class IdentityCard extends Applet {
 	private String javacardPrivateExponent = "4019248479486344703173865994833247965130855891297001843442511551221472431764138438478319727380832243535639804382400663422189381536828238855709495144508993";
 	private String javacardModulus = "7225408371738440114436736221839657995687428751040476459668967509666492175788144159467939803507838616521107657543265826137267809302826074208901286160547939";
 	
+	//will need to be changed to the new kind of certificate
 	private String[] javacardCert = {"Javacard","Javacard","7225408371738440114436736221839657995687428751040476459668967509666492175788144159467939803507838616521107657543265826137267809302826074208901286160547939","65537","Apr 25 2017 9:44:25 PM CEST","Apr 25 2018 9:44:25 PM CEST","8DB055AED73FE6206C2233F9735F71C9FDEC54CD9AE1A33375D8D706C9EFB1EC3572D40CF8842096F32544DD8D17414998052EE1C08628C6232A39474E5424FF"};
 	
 	private String mainCAPublicExponent= "65537";
@@ -257,6 +258,7 @@ public class IdentityCard extends Applet {
 			readCount = apdu.receiveBytes(ISO7816.OFFSET_CDATA);
 		}
 		
+		//here we read in the HomeMadeCertificate
 		HomeMadeCertificate certificate =null;
 	    ByteArrayInputStream in = new ByteArrayInputStream(bigStorage);
 	    ObjectInputStream is;
@@ -270,7 +272,49 @@ public class IdentityCard extends Applet {
 		System.out.println(certificate.getIssuer());
 	    
 		
+		
+		boolean verified = false;
+		Boolean valid = false;
+		try {
+			// now we need to verify if the certificate is correct
+			byte[] sig = certificate.getSignature();
+			Signature SPcheck = Signature.getInstance("SHA256withRSA");	
+			BigInteger exp= certificate.getPublicKeyExponent();
+			BigInteger modulus = certificate.getPublicKeyModulus();
+			KeyFactory factory = KeyFactory.getInstance("RSA");
+			RSAPublicKeySpec spec = new RSAPublicKeySpec(modulus, exp); 
+			PublicKey SPPublicKey = factory.generatePublic(spec);
+			SPcheck.initVerify(SPPublicKey);
+			
+			
+			
+			//we need to check if the current date is in between the validity period;
+			String[] validFrom = certificate.getValidFrom();
+			String[] validTo = certificate.getValidTo();
+			SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd-HH-mm");
+			String lastValidationString = String.join("-", lastValidationTime);
+			String validFromString = String.join("-", validFrom);
+			String validToString = String.join("-", validTo);
+			Date lastValidationDate = format.parse(lastValidationString);
+			Date validFromDate = format.parse(validFromString); 
+			Date validToDate = format.parse(validToString);
+			
+			if(lastValidationDate.after(validFromDate) && lastValidationDate.before(validToDate)) {
+			   valid = true;
+			}
 
+		    verified = SPcheck.verify(sig);
+		} catch (NoSuchAlgorithmException e) {
+		} catch (InvalidKeySpecException e) {
+		} catch (InvalidKeyException e) {
+		} catch (SignatureException e) {
+		} catch (ParseException e) {
+		}
+
+		if (!(verified && valid)){
+		//here the ABORT should happen
+			
+		}
 		
 		
 		
