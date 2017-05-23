@@ -243,11 +243,16 @@ public class IdentityCard extends Applet {
 	
 	
 	private void authenticate_sp(APDU apdu){
+		System.out.println("AUTH1");
 		Arrays.fill(bigStorage, (byte) 0);
+		System.out.println("AUTH2");
 		byte[] buffer = apdu.getBuffer();
+		System.out.println("AUTH3");
 		short bytesLeft = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
+		System.out.println("AUTH4");
 		short START = 0;
 		Util.arrayCopy(buffer, START, bigStorage, START, (short)8);
+		System.out.println("AUTH5");
 		short readCount = apdu.setIncomingAndReceive();
 		short i = 0;
 		while ( bytesLeft > 0){

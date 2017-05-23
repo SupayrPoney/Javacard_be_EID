@@ -64,7 +64,7 @@ public class Client {
 	        	System.out.println(len);
 	            message = new byte[len - SIZE_OF_INT_IN_BYTES];
 	        	System.out.println(message.length);
-	            dIn.readFully(message, 0, message.length); // read the message
+	            dIn.readFully(message); // read the message
 	        	System.out.println(len);
 	        }
 	        byte[] toSend = new byte[len];
@@ -82,7 +82,7 @@ public class Client {
 		if (response == 1) {
 			System.out.println("SUCCESS");
 			// authenticateSP
-			 Socket clientSocketSP = new Socket("localhost", 8080);
+			 Socket clientSocketSP = new Socket("localhost", 9999);
 			 DataOutputStream outToServer = new DataOutputStream(clientSocketSP.getOutputStream());
 		     DataInputStream dIn = new DataInputStream(clientSocketSP.getInputStream());
 		     
@@ -98,10 +98,10 @@ public class Client {
 
 		        if((len - 1)>0) {
 		        	System.out.println(len);
-		            message = new byte[(len -1)];
-		            dIn.readFully(message, 0, message.length); // read the message
+		            message = new byte[len - 5];
+		            dIn.readFully(message); // read the message
 		        }
-		        
+		        System.out.println(command);
 		        switch(command){
 		        case 1: 
 		        	verify_certificate(message, c);
@@ -119,6 +119,7 @@ public class Client {
 	}
 	
 	private static void verify_certificate(byte[] message, IConnection c) throws Exception{
+		System.out.println("Sending Certificate Verification Request");
 		CommandAPDU a = new CommandAPDU(IDENTITY_CARD_CLA, AUTHENTICATE_SP, 0x00, 0x00, message);
 		ResponseAPDU r= c.transmit(a);
 		
