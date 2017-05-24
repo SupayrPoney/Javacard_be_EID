@@ -3,12 +3,14 @@ package be.msec.smartcard;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
+import java.lang.reflect.Array;
 import java.math.BigInteger;
 import java.security.InvalidKeyException;
 import java.security.KeyFactory;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
+import java.security.SecureRandom;
 import java.security.Signature;
 import java.security.SignatureException;
 import java.security.cert.Certificate;
@@ -18,7 +20,15 @@ import java.security.spec.RSAPublicKeySpec;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Date;
+
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.KeyGenerator;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.SecretKey;
 
 import helpers.HomeMadeCertificate;
 import javacard.framework.APDU;
@@ -27,6 +37,8 @@ import javacard.framework.ISO7816;
 import javacard.framework.ISOException;
 import javacard.framework.OwnerPIN;
 import javacard.framework.Util;
+
+
 
 public class IdentityCard extends Applet {
 	private final static byte IDENTITY_CARD_CLA =(byte)0x80;
@@ -195,7 +207,9 @@ public class IdentityCard extends Applet {
 
 		RSAPublicKeySpec spec = new RSAPublicKeySpec(new BigInteger(govTimePublicModulus), new BigInteger(govTimePublicExponent));
 //		System.out.println(new BigInteger(govTimePublicModulus));
-        KeyFactory factory = KeyFactory.getInstance("RSA");
+        BigInteger a = new BigInteger(new byte[4]);
+        a.
+		KeyFactory factory = KeyFactory.getInstance("RSA");
         RSAPublicKey timestampPubKey =  (RSAPublicKey) factory.generatePublic(spec);
 //		System.out.println("MODULUS:" + timestampPubKey.getModulus());
 //		System.out.println("EXPONENT:" + timestampPubKey.getPublicExponent());
@@ -280,6 +294,7 @@ public class IdentityCard extends Applet {
 		
 		boolean verified = false;
 		Boolean valid = false;
+		PublicKey SPPublicKey = null;
 		try {
 			// now we need to verify if the certificate is correct
 			byte[] sig = certificate.getSignature();
@@ -288,7 +303,7 @@ public class IdentityCard extends Applet {
 			BigInteger modulus = certificate.getPublicKeyModulus();
 			KeyFactory factory = KeyFactory.getInstance("RSA");
 			RSAPublicKeySpec spec = new RSAPublicKeySpec(modulus, exp); 
-			PublicKey SPPublicKey = factory.generatePublic(spec);
+			SPPublicKey = factory.generatePublic(spec);
 			SPcheck.initVerify(SPPublicKey);
 			
 			
@@ -321,7 +336,53 @@ public class IdentityCard extends Applet {
 			
 		}
 		
+		//otherwise we generate a new symmetric key
+		 KeyGenerator kgen;
+		 SecretKey key = null;
+		try {
+			//make sure this works on the card..
+			kgen = KeyGenerator.getInstance("AES");
+			//should this be 256 since the size of the keys we use are 256?
+	        kgen.init(128);
+	        key = (SecretKey) kgen.generateKey();
+		} catch (NoSuchAlgorithmException e) {
+
+		}
 		
+		try {
+			Cipher rsaenc = Cipher.getInstance("RSA");
+			rsaenc.init(Cipher.ENCRYPT_MODE, SPPublicKey);
+			byte[] encriptedKey = rsaenc.doFinal(key.getEncoded());
+			
+			//we have to generate a challenge 
+			SecureRandom random = new SecureRandom();
+			byte[] values = new byte[4];
+			random.nextBytes(values);
+			
+			
+			
+			//we have to symmetrically encyprt the challenge and the subject
+			Cipher symenc = Cipher.getInstance("RSA");
+			symenc.init(Cipher.ENCRYPT_MODE, key);
+			byte[] subject = certificate.getSubject().getBytes();
+			byte[] msg = new byte[(20 + subject.length)];
+			System.arraycopy(values, 0, msg, 0, values.length);
+			System.arraycopy(subject, 0, msg, values.length, subject.length);
+			
+
+			byte[] encriptedchallengeSubject = symenc.doFinal(key.getEncoded());
+			
+		} catch (NoSuchAlgorithmException e) {
+		} catch (NoSuchPaddingException e) {
+		} catch (InvalidKeyException e) {
+		} catch (IllegalBlockSizeException e) {
+		} catch (BadPaddingException e) {
+		}
+
+	
+		
+
+
 		
 		
 	}
