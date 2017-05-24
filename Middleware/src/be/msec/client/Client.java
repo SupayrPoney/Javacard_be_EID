@@ -3,11 +3,15 @@ package be.msec.client;
 import be.msec.client.connection.Connection;
 import be.msec.client.connection.IConnection;
 import be.msec.client.connection.SimulatedConnection;
+import helpers.HomeMadeCertificate;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.ObjectInputStream;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.text.ParseException;
@@ -32,6 +36,19 @@ public class Client {
 	private static final byte VALIDATE_TIME = 0x30;
 	private static final byte VERIFY_TIME_SIG = 0x32;
 	private static final byte AUTHENTICATE_SP = 0x34;
+	private static final int  AUTHENTICATE_SP_STEP = 0x36;
+	
+	private static final short ISSUER_LEN = 16; 
+	private static final short SUBJECT_LEN = 16;
+	private static final short DATE_LEN = 8; 
+
+	private static final short EXPONENT_LEN = 64; 
+	private static final short MODULUS_LEN = 4; 
+	
+	private static final short SIGN_LEN = 4; 
+	
+	
+	
 	
 	private final static short SW_VERIFICATION_FAILED = 0x6300;
 	private final static short SW_PIN_VERIFICATION_REQUIRED = 0x6301;
@@ -61,11 +78,8 @@ public class Client {
 	        //from four bytes to an int
 	        int len = length[0] << 24 | (length[1] & 0xFF) << 16 | (length[2] & 0xFF) << 8 | (length[3] & 0xFF);
 	        if(len>0) {
-	        	System.out.println(len);
 	            message = new byte[len - SIZE_OF_INT_IN_BYTES];
-	        	System.out.println(message.length);
 	            dIn.readFully(message); // read the message
-	        	System.out.println(len);
 	        }
 	        byte[] toSend = new byte[len];
 	        System.arraycopy(length, 0, toSend, 0, SIZE_OF_INT_IN_BYTES);
@@ -76,6 +90,7 @@ public class Client {
 	        System.out.println("Sending to card");
 			a = new CommandAPDU(IDENTITY_CARD_CLA, VERIFY_TIME_SIG, 0x00, 0x00,toSend);
 			r = c.transmit(a);
+			System.out.println(r);
 			byte[] dataOut = Arrays.copyOfRange(r.getData(),(short) 5 + len, 5 + len+1); 
 			response = dataOut[0];			
 		}
@@ -86,7 +101,7 @@ public class Client {
 			 DataOutputStream outToServer = new DataOutputStream(clientSocketSP.getOutputStream());
 		     DataInputStream dIn = new DataInputStream(clientSocketSP.getInputStream());
 		     
-		     byte[] length = new byte[4];
+		        byte[] length = new byte[4];
 		        length[0] = (byte) dIn.read(); 
 		        length[1] = (byte) dIn.read();
 		        length[2] = (byte) dIn.read();
@@ -97,14 +112,12 @@ public class Client {
 		        int command = (int) dIn.read();
 
 		        if((len - 1)>0) {
-		        	System.out.println(len);
 		            message = new byte[len - 5];
 		            dIn.readFully(message); // read the message
 		        }
-		        System.out.println(command);
 		        switch(command){
 		        case 1: 
-		        	verify_certificate(message, c);
+		        	verify_certificate(message, a, r, c);
 		        
 		        }
 			 
@@ -118,10 +131,80 @@ public class Client {
 		// releaseAttributes
 	}
 	
-	private static void verify_certificate(byte[] message, IConnection c) throws Exception{
+	private static void verify_certificate(byte[] message,CommandAPDU a, ResponseAPDU r, IConnection c) throws Exception{
 		System.out.println("Sending Certificate Verification Request");
-		CommandAPDU a = new CommandAPDU(IDENTITY_CARD_CLA, AUTHENTICATE_SP, 0x00, 0x00, message);
-		ResponseAPDU r= c.transmit(a);
+		System.out.println("AUTH1");
+	    ByteArrayInputStream in = new ByteArrayInputStream(message);
+	    ObjectInputStream is;
+		HomeMadeCertificate certificate = null;
+		try {
+			is = new ObjectInputStream(in);
+			certificate = (HomeMadeCertificate) is.readObject();
+		} catch (IOException e) {
+			System.out.println("IOException");
+		} catch (ClassNotFoundException e) {
+			e.printStackTrace();
+		}
+		byte[] bigBuffer = new byte[ISSUER_LEN + SUBJECT_LEN + MODULUS_LEN + EXPONENT_LEN + 2*DATE_LEN + SIGN_LEN];
+		byte[] issuer = new byte[ISSUER_LEN];
+		byte[] issuerBytes = certificate.getIssuer().getBytes("UTF-8");
+		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(issuerBytes));
+		System.arraycopy(issuerBytes, 0, issuer, 0, issuerBytes.length);
+		System.arraycopy(issuer, 0, bigBuffer, 0, ISSUER_LEN);
+		
+		byte[] subject = new byte[SUBJECT_LEN];
+		byte[] subjectBytes = certificate.getSubject().getBytes("UTF-8");
+		System.arraycopy(subjectBytes, 0, subject, 0, issuerBytes.length);
+		System.arraycopy(subject, 0, bigBuffer, ISSUER_LEN, SUBJECT_LEN);
+		
+		byte[] modulus = new byte[MODULUS_LEN];
+		byte[] modulusBytes = certificate.getPublicKeyModulus().toByteArray();
+		System.arraycopy(modulusBytes, 0, modulus, 0, modulusBytes.length);
+		System.arraycopy(modulus, 0, bigBuffer, ISSUER_LEN + SUBJECT_LEN, MODULUS_LEN);
+		
+		byte[] exponent = new byte[EXPONENT_LEN];
+		byte[] exponentBytes = certificate.getPublicKeyExponent().toByteArray();
+		byte[] shortenedExponent = Arrays.copyOfRange(exponentBytes, 1, exponentBytes.length);
+		System.out.println("Modulus Size: " + exponentBytes.length);
+		System.arraycopy(shortenedExponent, 0, exponent, 0, shortenedExponent.length);
+		System.arraycopy(exponent, 0, bigBuffer, ISSUER_LEN + SUBJECT_LEN + MODULUS_LEN, EXPONENT_LEN);
+		
+		byte[] validFrom = new byte[DATE_LEN];
+		String[] validFromString = certificate.getValidFrom();
+		byte[] yearBytes = ByteBuffer.allocate(SIZE_OF_INT_IN_BYTES).putInt(new Integer(validFromString[0])).array();
+		System.arraycopy(yearBytes, 0, validFrom, 0, SIZE_OF_INT_IN_BYTES);
+		validFrom[SIZE_OF_INT_IN_BYTES] = (byte) (int) new Integer(validFromString[1]);
+		validFrom[SIZE_OF_INT_IN_BYTES + 1] = (byte) (int) new Integer(validFromString[2]);
+		validFrom[SIZE_OF_INT_IN_BYTES + 2] = (byte) (int) new Integer(validFromString[3]);
+		validFrom[SIZE_OF_INT_IN_BYTES + 3] = (byte) (int) new Integer(validFromString[4]);
+		System.arraycopy(validFrom, 0, bigBuffer, ISSUER_LEN + SUBJECT_LEN + MODULUS_LEN + EXPONENT_LEN, DATE_LEN);
+		
+		byte[] validUntil = new byte[DATE_LEN];
+		String[] validUntilString = certificate.getValidFrom();
+		yearBytes = ByteBuffer.allocate(SIZE_OF_INT_IN_BYTES).putInt(new Integer(validFromString[0])).array();
+		System.arraycopy(yearBytes, 0, validUntil, 0, SIZE_OF_INT_IN_BYTES);
+		validUntil[SIZE_OF_INT_IN_BYTES] = (byte) (int) new Integer(validUntilString[1]);
+		validUntil[SIZE_OF_INT_IN_BYTES + 1] = (byte) (int) new Integer(validUntilString[2]);
+		validUntil[SIZE_OF_INT_IN_BYTES + 2] = (byte) (int) new Integer(validUntilString[3]);
+		validUntil[SIZE_OF_INT_IN_BYTES + 3] = (byte) (int) new Integer(validUntilString[4]);
+		System.arraycopy(validUntil, 0, bigBuffer, ISSUER_LEN + SUBJECT_LEN + MODULUS_LEN + EXPONENT_LEN + DATE_LEN, DATE_LEN);
+		
+		byte[] signature = certificate.getSignature();
+		System.arraycopy(signature, 0, bigBuffer, ISSUER_LEN + SUBJECT_LEN + MODULUS_LEN + EXPONENT_LEN + DATE_LEN + DATE_LEN, SIGN_LEN);
+
+		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(bigBuffer));
+		System.out.println("Sending a message of " + bigBuffer.length + " bytes");
+		byte[] buffer = new byte[250];
+		//Divide in chunks of 250 bytes
+		for (int i = 0; i < Math.ceil((double)bigBuffer.length/250); i++) {
+			System.arraycopy(bigBuffer, 250*i, buffer, 0, Math.min(250, bigBuffer.length - 250*i));
+			System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(buffer));
+			a = new CommandAPDU(IDENTITY_CARD_CLA, AUTHENTICATE_SP_STEP, 0x00, 0x00, buffer);
+			r = c.transmit(a);
+		}
+		a = new CommandAPDU(IDENTITY_CARD_CLA, AUTHENTICATE_SP, 0x00, 0x00, new byte[1]);
+		r = c.transmit(a);
+		System.out.println(r);
 		
 		
 	}
@@ -142,6 +225,7 @@ public class Client {
 		byte[] dataIn = Arrays.copyOfRange(a.getBytes(), 0x05, 5 + 100); 
 	//	System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(dataIn));
 		r = c.transmit(a);
+		System.out.println(r);
 	//	byte[] date = Arrays.copyOfRange(dataIn, (short)0x00, (short)4);
 	//	int b = date[0] << 24 | (date[1] & 0xFF) << 16 | (date[2] & 0xFF) << 8 | (date[3] & 0xFF);
 	//	System.out.println(b);

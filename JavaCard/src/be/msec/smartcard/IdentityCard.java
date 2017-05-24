@@ -3,6 +3,7 @@ package be.msec.smartcard;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
+import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
 import java.security.InvalidKeyException;
 import java.security.KeyFactory;
@@ -46,6 +47,16 @@ public class IdentityCard extends Applet {
 	private static final byte VALIDATE_TIME = 0x30;
 	private static final byte VERIFY_TIME_SIG = 0x32;
 	private static final byte AUTHENTICATE_SP = 0x34;
+	private static final int AUTHENTICATE_SP_STEP = 0x36;
+	
+	private static final short ISSUER_LEN = 16; 
+	private static final short SUBJECT_LEN = 16;
+	private static final short DATE_LEN = 8; 
+
+	private static final short EXPONENT_LEN = 32; 
+	private static final short MODULUS_LEN = 4; 
+	
+	private static final short SIGN_LEN = 4; 
 	
 	private final static byte PIN_TRY_LIMIT =(byte)0x03;
 	private final static byte PIN_SIZE =(byte)0x04;
@@ -69,7 +80,6 @@ public class IdentityCard extends Applet {
 	private String govTimePublicExponent = "65537";
 	private String govTimePublicModulus = "7069442399809149374049602182035905118617463308097239483861495753479385489754469537665461584246377137057227306597598925117748461915260386529575906451435569";
 	//CHECK HERE IF IT'S CORRECT
-	int[] timeRatios = {525600, 1440, };
 	
 	private String[] lastValidationTime = {"2017","05","01","15","06"};
 	
@@ -78,8 +88,10 @@ public class IdentityCard extends Applet {
 	
 	private OwnerPIN pin;
 	private byte[] storage = new byte[]{0x30, 0x35, 0x37, 0x36, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04};
-	private byte[] bigStorage = new byte[512];
+	private byte[] bigStorage = new byte[1024];
 	private byte[] byteToInt = new byte[]{0x00,0x00,0x00,0x00, 0x04, 0x04};
+	
+	private short authStep = 0;
 	
 	//TODO nymu,SP - hash(UserID ++ hash(cerificate_SP))
 	private String name;
@@ -231,7 +243,6 @@ public class IdentityCard extends Applet {
 			apdu.setOutgoing();
 			apdu.setOutgoingLength((short)1);
 			apdu.sendBytesLong(new byte[]{(byte)response},(short)0,(short)1);
-			
 		} catch (ParseException e) {
 			// TODO Auto-generated catch block
 		}
@@ -242,43 +253,36 @@ public class IdentityCard extends Applet {
 	
 	
 	private void authenticate_sp(APDU apdu){
+		authStep = 0;
 		System.out.println("AUTH1");
-		Arrays.fill(bigStorage, (byte) 0);
-		System.out.println("AUTH2");
-		byte[] buffer = apdu.getBuffer();
-		System.out.println("AUTH3");
-		short bytesLeft = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
-		System.out.println("AUTH4");
-		short START = 0;
-		Util.arrayCopy(buffer, START, bigStorage, START, (short)8);
-		System.out.println("AUTH5");
-		short readCount = apdu.setIncomingAndReceive();
-		short i = 0;
-		while ( bytesLeft > 0){
-			
-			Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, bigStorage, i, readCount);
-			bytesLeft -= readCount;
-			i+=readCount;
-			readCount = apdu.receiveBytes(ISO7816.OFFSET_CDATA);
-		}
+		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(bigStorage));
+		byte[] issuer = new byte[ISSUER_LEN];
+		byte[] subject = new byte[SUBJECT_LEN];
+		byte[] modulus = new byte[MODULUS_LEN];
+		byte[] exponent = new byte[EXPONENT_LEN];
+		byte[] validFrom = new byte[DATE_LEN];
+		byte[] validUntil = new byte[DATE_LEN];
+		byte[] signature = new byte[SIGN_LEN];
+
+		Util.arrayCopy(bigStorage, (short) 0x00, issuer,(short) 0x00, ISSUER_LEN);
+		Util.arrayCopy(bigStorage, ISSUER_LEN, subject,(short) 0x00, SUBJECT_LEN);
+		Util.arrayCopy(bigStorage, (short) (SUBJECT_LEN + ISSUER_LEN), modulus,(short) 0x00, MODULUS_LEN);
+		Util.arrayCopy(bigStorage, (short) (SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN), exponent,(short) 0x00, EXPONENT_LEN);
+		Util.arrayCopy(bigStorage, (short) (SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN + EXPONENT_LEN), validFrom,(short) 0x00, DATE_LEN);
+		Util.arrayCopy(bigStorage, (short) (SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN + EXPONENT_LEN + DATE_LEN), validUntil,(short) 0x00, DATE_LEN);
+		Util.arrayCopy(bigStorage, (short) (SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN + EXPONENT_LEN + DATE_LEN + DATE_LEN), signature,(short) 0x00, SIGN_LEN);
 		
-		HomeMadeCertificate certificate =null;
-	    ByteArrayInputStream in = new ByteArrayInputStream(bigStorage);
-	    ObjectInputStream is;
+		String issuerString;
 		try {
-			is = new ObjectInputStream(in);
-			certificate = (HomeMadeCertificate) is.readObject();
-		} catch (IOException e) {
-		} catch (ClassNotFoundException e) {
-
+			issuerString = new String(issuer,"UTF-8");
+			System.out.println("Card Issuer: " + issuerString);
+		} catch (UnsupportedEncodingException e) {
+			// TODO Auto-generated catch block
+			System.out.println("UnsupportedEncodingException");
 		}
-		System.out.println(certificate.getIssuer());
+		
+		System.out.println();
 	    
-		
-
-		
-		
-		
 		
 	}
 	
@@ -300,6 +304,7 @@ public class IdentityCard extends Applet {
 	 * This method is called when the applet is selected and an APDU arrives.
 	 */
 	public void process(APDU apdu) throws ISOException {
+		System.out.println("NEW APDU");
 		//A reference to the buffer, where the APDU data is stored, is retrieved.
 		byte[] buffer = apdu.getBuffer();
 		
@@ -308,10 +313,12 @@ public class IdentityCard extends Applet {
 			return;
 		
 		//Check whether the indicated class of instructions is compatible with this applet.
-		if (buffer[ISO7816.OFFSET_CLA] != IDENTITY_CARD_CLA)ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);
+		if (buffer[ISO7816.OFFSET_CLA] != IDENTITY_CARD_CLA){System.out.println("huh?");ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);};
 		//A switch statement is used to select a method depending on the instruction
+		System.out.println(buffer[ISO7816.OFFSET_INS]);
 		switch(buffer[ISO7816.OFFSET_INS]){
 		case VALIDATE_PIN_INS:
+			
 			validatePIN(apdu);
 			break;
 		case GET_SERIAL_INS:
@@ -334,6 +341,9 @@ public class IdentityCard extends Applet {
 		case AUTHENTICATE_SP: 
 			authenticate_sp(apdu);
 			
+		case AUTHENTICATE_SP_STEP:
+			auth_step(apdu);
+			
 		//If no matching instructions are found it is indicated in the status word of the response.
 		//This can be done by using this method. As an argument a short is given that indicates
 		//the type of warning. There are several predefined warnings in the 'ISO7816' class.
@@ -343,6 +353,28 @@ public class IdentityCard extends Applet {
 
 	
 	
+	private void auth_step(APDU apdu) {
+		if (authStep == 0) {
+			Arrays.fill(bigStorage, (byte) 0);
+		}
+		byte[] buffer = apdu.getBuffer();
+		short bytesLeft = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
+		short START = 0;
+		Util.arrayCopy(buffer, START, storage, START, (short)8);
+		short readCount = apdu.setIncomingAndReceive();
+		short i = (short) (250*authStep);
+		while ( bytesLeft > 0){
+			Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, bigStorage, i, readCount);
+			bytesLeft -= readCount;
+			i+=readCount;
+			readCount = apdu.receiveBytes(ISO7816.OFFSET_CDATA);
+		}
+		
+		
+		authStep += 1;
+		
+	}
+
 	private void echo(APDU apdu){
 		System.out.println("Echo");
 		byte[] buffer = apdu.getBuffer();
@@ -411,7 +443,7 @@ public class IdentityCard extends Applet {
 			//}
 			if (pin.check(buffer, ISO7816.OFFSET_CDATA,PIN_SIZE)==false)
 				ISOException.throwIt(SW_VERIFICATION_FAILED);
-		}else ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+		}else{ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);}
 	}
 	
 	/*

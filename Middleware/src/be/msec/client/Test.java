@@ -54,10 +54,12 @@ public class Test {
 		byte[] sign = new byte[8];
 		String[] fromDate = {"2017", "05", "25", "09", "44"};
 		String[] toDate = {"2018", "05", "25", "09", "44"};
-		String subject = "timestamp";
-		HomeMadeCertificate cert= new HomeMadeCertificate(subject, subject, new BigInteger("7069442399809149374049602182035905118617463308097239483861495753479385489754469537665461584246377137057227306597598925117748461915260386529575906451435569"), 
+		String subject = "egov2";
+		HomeMadeCertificate cert= new HomeMadeCertificate(subject, subject, new BigInteger("10554386398715009799383770668844394385077749890982339064701937475083362987983834269156144949025011552047026073019318971307070997094912766506017370126042689"), 
 				new BigInteger("65537"), sign, fromDate, toDate);
 
+		
+		
 		
         Path path = Paths.get("signatures/" + subject + ".sig");
         byte[] data = null;
@@ -70,10 +72,10 @@ public class Test {
 		
         cert.setSignature(data);
 		cert.save();
-		
-		HomeMadeCertificate deserCert = restoreCert(subject);
-		
-		System.out.println(Arrays.equals(deserCert.getSignature(),data));
+//		
+//		HomeMadeCertificate deserCert = restoreCert(subject);
+//		
+//		System.out.println(Arrays.equals(deserCert.getSignature(),data));
 
 	      
 	}

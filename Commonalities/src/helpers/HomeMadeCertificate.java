@@ -6,6 +6,9 @@ import java.io.ObjectOutputStream;
 import java.math.BigInteger;
 
 public class HomeMadeCertificate implements java.io.Serializable{
+	/**
+	 * 
+	 */
 	String subject;
 	String issuer;
 	BigInteger publicKeyExponent;
