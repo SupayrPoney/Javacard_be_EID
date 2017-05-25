@@ -12,10 +12,21 @@ import java.io.ObjectInputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.security.InvalidKeyException;
 import java.security.KeyStore;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.Signature;
+import java.security.interfaces.RSAPrivateKey;
+import java.util.Arrays;
+
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 
 
 
@@ -108,7 +119,62 @@ public class ServiceProvider extends Thread{
 				e.printStackTrace();
 			}
 			
-		}
+			
+//		      byte[] key = null;
+//	            byte[] message = null;
+//	            SecretKey symkey = null; 
+//	            RSAPrivateKey SPPrivateKey= null;
+//	            Cipher rsadec;
+//				try {
+//					rsadec = Cipher.getInstance("RSA");
+//					rsadec.init(Cipher.DECRYPT_MODE, SPPrivateKey);
+//		            byte[] encodedKey =rsadec.doFinal(key);
+//		            symkey = new SecretKeySpec(encodedKey, 0, encodedKey.length, "RSA");
+//		            Cipher rsasymdec = Cipher.getInstance("RSA");
+//		            rsasymdec.init(Cipher.DECRYPT_MODE, symkey);
+//		            byte[] decriptedmessage = rsasymdec.doFinal(message);
+//		            byte[] challenge = Arrays.copyOfRange(decriptedmessage, 0, 20);
+//		            String subject = new String(Arrays.copyOfRange(decriptedmessage, 21,decriptedmessage.length));
+//		            if (!(subject.equals(SPName))){
+		            	//here we have to abort
+		            	
+		            }
+		           //we create the challenge + 1 
+		            // i'm doing weird things here.. what if the original challenge + 1 is no longer 20 bytes? etc
+		            
+//		            ByteBuffer wrapped = ByteBuffer.wrap(challenge); // big-endian by default
+//		            short num = wrapped.getShort();
+//		            short newnum = (short) (num + 1); 
+//		            ByteBuffer dbuf = ByteBuffer.allocate(20);
+//		            dbuf.putShort(newnum);
+//		            byte[] responseChalleng = dbuf.array(); 
+		            
+		            
+		            
+		            
+		            
+		            
+		            
+//				} catch (NoSuchAlgorithmException e) {
+//					// TODO Auto-generated catch block
+//					e.printStackTrace();
+//				} catch (NoSuchPaddingException e) {
+//					// TODO Auto-generated catch block
+//					e.printStackTrace();
+//				} catch (InvalidKeyException e) {
+//					// TODO Auto-generated catch block
+//					e.printStackTrace();
+//				} catch (IllegalBlockSizeException e) {
+//					// TODO Auto-generated catch block
+//					e.printStackTrace();
+//				} catch (BadPaddingException e) {
+//					// TODO Auto-generated catch block
+//					e.printStackTrace();
+//				}
+	            
+			
+			
+			
 	
 	
 	public void counter(){

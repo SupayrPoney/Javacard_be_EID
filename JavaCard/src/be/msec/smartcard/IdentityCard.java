@@ -4,22 +4,34 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.UnsupportedEncodingException;
+import java.lang.reflect.Array;
 import java.math.BigInteger;
 import java.security.InvalidKeyException;
+import java.security.Key;
 import java.security.KeyFactory;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
+import java.security.SecureRandom;
 import java.security.Signature;
 import java.security.SignatureException;
 import java.security.cert.Certificate;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.InvalidKeySpecException;
+import java.security.spec.RSAPrivateKeySpec;
 import java.security.spec.RSAPublicKeySpec;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Date;
+
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.KeyGenerator;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.SecretKey;
 
 import helpers.HomeMadeCertificate;
 import javacard.framework.APDU;
@@ -28,6 +40,11 @@ import javacard.framework.ISO7816;
 import javacard.framework.ISOException;
 import javacard.framework.OwnerPIN;
 import javacard.framework.Util;
+import javacard.security.KeyBuilder;
+//import javacard.security.RSAPublicKey;
+//import javacard.security.Signature;
+
+
 
 public class IdentityCard extends Applet {
 	private final static byte IDENTITY_CARD_CLA =(byte)0x80;
@@ -53,10 +70,10 @@ public class IdentityCard extends Applet {
 	private static final short SUBJECT_LEN = 16;
 	private static final short DATE_LEN = 8; 
 
-	private static final short EXPONENT_LEN = 32; 
-	private static final short MODULUS_LEN = 4; 
-	
-	private static final short SIGN_LEN = 4; 
+	private static final short EXPONENT_LEN = 3; 
+	private static final short MODULUS_LEN = 64; 
+
+	private static final short SIGN_LEN = 64; 
 	
 	private final static byte PIN_TRY_LIMIT =(byte)0x03;
 	private final static byte PIN_SIZE =(byte)0x04;
@@ -70,18 +87,18 @@ public class IdentityCard extends Applet {
 	private String javacardPrivateExponent = "4019248479486344703173865994833247965130855891297001843442511551221472431764138438478319727380832243535639804382400663422189381536828238855709495144508993";
 	private String javacardModulus = "7225408371738440114436736221839657995687428751040476459668967509666492175788144159467939803507838616521107657543265826137267809302826074208901286160547939";
 	
+	//will need to be changed to the new kind of certificate
 	private String[] javacardCert = {"Javacard","Javacard","7225408371738440114436736221839657995687428751040476459668967509666492175788144159467939803507838616521107657543265826137267809302826074208901286160547939","65537","Apr 25 2017 9:44:25 PM CEST","Apr 25 2018 9:44:25 PM CEST","8DB055AED73FE6206C2233F9735F71C9FDEC54CD9AE1A33375D8D706C9EFB1EC3572D40CF8842096F32544DD8D17414998052EE1C08628C6232A39474E5424FF"};
 	
-	private String mainCAPublicExponent= "65537";
-	private String mainCaPublicModulus = "7615538731625267295662549109333519945267947283726396806643436348704388298950354538429913118402429549367126946884389145577506962581434883709177615141122583";
+	private byte[] mainCAPublicExponent = {1,0,1};
+	private byte[] mainCAPublicModulus = {0, -111,103,-6,88,-39,13,27,-42,85,-123,-123,-92,101,-57,-34,83,42,-118,-101,115,38,22,-113,-108,-21,97,-21,99,-18,-77,54,58,32,115,-47,-80,-71,53,43,-3,81,88,114,-25,-114,125,-12,-53,108,25,-49,37,15,66,20,8,52,-99,-49,-79,23,81,50,23};
 
 	
-	
-	private String govTimePublicExponent = "65537";
-	private String govTimePublicModulus = "7069442399809149374049602182035905118617463308097239483861495753479385489754469537665461584246377137057227306597598925117748461915260386529575906451435569";
+	private byte[] govTimePublicExponent = {1,0,1};
+	private byte[] govTimePublicModulus = {-122,-6,-74,-13,93,84,85,-61,-39,4,-102,-7,82,43,-67,-2,-63,-65,-69,100,51,-106,4,94,63,7,-67,61,127,-16,-59,-95,34,-49,14,14,94,44,81,-36,94,26,-45,46,-100,-40,-30,-55,-69,40,124,-3,0,-2,-84,-97,0,-87,77,44,-29,-20,-80,49};
 	//CHECK HERE IF IT'S CORRECT
 	
-	private String[] lastValidationTime = {"2017","05","01","15","06"};
+	private String[] lastValidationTime = {"2014","05","01","15","06"};
 	
 	private String[] deltaValidation = {"0","0","1","0","0"};
 	
@@ -139,14 +156,14 @@ public class IdentityCard extends Applet {
 		short START = 0;
 		Util.arrayCopy(buffer, START, storage, START, (short)8);
 		short readCount = apdu.setIncomingAndReceive();
-		short i = 0;
-		while ( bytesLeft > 0){
-			
-			Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, storage, i, readCount);
-			bytesLeft -= readCount;
-			i+=readCount;
-			readCount = apdu.receiveBytes(ISO7816.OFFSET_CDATA);
-		}
+//		short i = 0;
+//		while ( bytesLeft > 0){
+//			
+//			Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, storage, i, readCount);
+//			bytesLeft -= readCount;
+//			i+=readCount;
+//			readCount = apdu.receiveBytes(ISO7816.OFFSET_CDATA);
+//		}
 		
 		Util.arrayCopy(storage, (short)0x00, byteToInt,(short) 0x00, (short)4);
 		String year = Integer.toString(byteToInt[0] << 24 | (byteToInt[1] & 0xFF) << 16 | (byteToInt[2] & 0xFF) << 8 | (byteToInt[3] & 0xFF));
@@ -164,6 +181,7 @@ public class IdentityCard extends Applet {
 			Date currentDate = format.parse(currentTimeString);
 			Date lastValidationDate = format.parse(lastValidationString);
 			if((currentDate.getTime() - lastValidationDate.getTime())/(1000*60*60*24) > 1){
+				System.out.println("DELTA: "+(currentDate.getTime() - lastValidationDate.getTime())/(1000*60*60*24));
 				apdu.setOutgoing();
 				apdu.setOutgoingLength((short)1);
 				Util.setShort(buffer,(short) 0, (short) 1);
@@ -181,6 +199,7 @@ public class IdentityCard extends Applet {
 	
 	private void verify_time_signature(APDU apdu) throws NoSuchAlgorithmException, InvalidKeySpecException, InvalidKeyException, SignatureException{
 		//4 bytes for len, 8 for date, rest for sign
+		System.out.println("VERIF");
 		byte[] buffer = apdu.getBuffer();
 		short bytesLeft = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
 		short START = 0;
@@ -203,13 +222,14 @@ public class IdentityCard extends Applet {
         
         Util.arrayCopy(bigStorage, (short) sizeOfLen, timeToVerify, (short) 0, (short)(sizeOfTime));
         Util.arrayCopy(bigStorage, (short) (sizeOfLen + sizeOfTime), sigToVerify, (short) 0, (short)(len - sizeOfLen - sizeOfTime));
-
-		RSAPublicKeySpec spec = new RSAPublicKeySpec(new BigInteger(govTimePublicModulus), new BigInteger(govTimePublicExponent));
+		
+		byte[] test = new byte[govTimePublicModulus.length + 1];
+		Util.arrayCopy(govTimePublicModulus, (short)0, test, (short)1, (short)govTimePublicModulus.length);
+		test[0] = (short) 0;
+		RSAPublicKeySpec spec = new RSAPublicKeySpec(new BigInteger(test), new BigInteger(govTimePublicExponent));
 //		System.out.println(new BigInteger(govTimePublicModulus));
-        KeyFactory factory = KeyFactory.getInstance("RSA");
+		KeyFactory factory = KeyFactory.getInstance("RSA");
         RSAPublicKey timestampPubKey =  (RSAPublicKey) factory.generatePublic(spec);
-//		System.out.println("MODULUS:" + timestampPubKey.getModulus());
-//		System.out.println("EXPONENT:" + timestampPubKey.getPublicExponent());
 
 		Signature signEngine = Signature.getInstance("SHA256withRSA");
 		signEngine.initVerify(timestampPubKey);
@@ -219,12 +239,33 @@ public class IdentityCard extends Applet {
 		signEngine.update(hashedTime, 0, hashedTime.length);
 		
 		boolean verifies = signEngine.verify(sigToVerify);
+//		System.out.println(new BigInteger(govTimePublicModulus));
+//        RSAPublicKey timestampPubKey = (RSAPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_512, false);
+
+//        timestampPubKey.setExponent(govTimePublicExponent, (short) 0, (short) govTimePublicExponent.length);
+//        timestampPubKey.setModulus(govTimePublicModulus, (short) 0, (short) govTimePublicModulus.length);
+ 		//System.out.println("MODULUS:" + timestampPubKey.getModulus());
+		//System.out.println("EXPONENT:" + timestampPubKey.getPublicExponent());
+		
+//		Signature signEngine = Signature.getInstance(Signature.ALG_RSA_SHA_PKCS1, false);
+//		System.out.println("VERIF2TER");
+//		signEngine.init( timestampPubKey, Signature.MODE_VERIFY);
+//        System.out.println("VERIF2QUAT");
+//		
+//		MessageDigest md = MessageDigest.getInstance("SHA-1");
+//		System.out.println("VERIF3");
+//
+//		byte[] hashedTime = md.digest(timeToVerify);
+//		signEngine.update(hashedTime, (short) 0, (short) hashedTime.length);
+//		
+//		boolean verifies = signEngine.verify(hashedTime, (short) 0, (short) hashedTime.length, sigToVerify, (short) 0, (short)sigToVerify.length);
+		//System.out.println(verifies);
 		
 		String year = Integer.toString(timeToVerify[0] << 24 | (timeToVerify[1] & 0xFF) << 16 | (timeToVerify[2] & 0xFF) << 8 | (timeToVerify[3] & 0xFF));
-		String month = Integer.toString((int)timeToVerify[4]);
-		String day = Integer.toString((int)timeToVerify[5]);
-		String hour = Integer.toString((int)timeToVerify[6]);
-		String min = Integer.toString((int)timeToVerify[7]);
+		String month = Integer.toString((int)(timeToVerify[4]& 0xFF));
+		String day = Integer.toString((int)(timeToVerify[5]& 0xFF));
+		String hour = Integer.toString((int)(timeToVerify[6]& 0xFF));
+		String min = Integer.toString((int)(timeToVerify[7]& 0xFF));
 		String timeString = String.join("-", new String[]{year,month,day,hour, min});
 		
 		String lastValidationString = String.join("-", lastValidationTime);
@@ -234,11 +275,17 @@ public class IdentityCard extends Applet {
 			Date timeDate = format.parse(timeString);
 			Date lastValidationDate = format.parse(lastValidationString);
 			short response = 1;
-			if(verifies || (timeDate.getTime() > lastValidationDate.getTime())){
+			System.out.println("time>VALIDATION: "+(timeDate.getTime() > lastValidationDate.getTime()));
+			System.out.println("VERIFIES:" +verifies);
+			if(!verifies || !(timeDate.getTime() > lastValidationDate.getTime())){
 				response = 0;
 			}
 			else{
 				lastValidationTime = new String[]{year,month,day,hour, min};
+				for (int j = 0; j < lastValidationTime.length; j++) {
+					System.out.println(j+","+lastValidationTime[j]);
+				}
+				System.out.println("UPDATINGTIME WITH: "+ String.join("-",lastValidationTime));
 			}
 			apdu.setOutgoing();
 			apdu.setOutgoingLength((short)1);
@@ -254,39 +301,149 @@ public class IdentityCard extends Applet {
 	
 	private void authenticate_sp(APDU apdu){
 		authStep = 0;
-		System.out.println("AUTH1");
-		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(bigStorage));
+		System.out.println("AUTH_SP");
 		byte[] issuer = new byte[ISSUER_LEN];
 		byte[] subject = new byte[SUBJECT_LEN];
-		byte[] modulus = new byte[MODULUS_LEN];
+		byte[] modulus = new byte[MODULUS_LEN+1];
+		modulus[0] = 0;
 		byte[] exponent = new byte[EXPONENT_LEN];
 		byte[] validFrom = new byte[DATE_LEN];
 		byte[] validUntil = new byte[DATE_LEN];
 		byte[] signature = new byte[SIGN_LEN];
 
 		Util.arrayCopy(bigStorage, (short) 0x00, issuer,(short) 0x00, ISSUER_LEN);
-		Util.arrayCopy(bigStorage, ISSUER_LEN, subject,(short) 0x00, SUBJECT_LEN);
-		Util.arrayCopy(bigStorage, (short) (SUBJECT_LEN + ISSUER_LEN), modulus,(short) 0x00, MODULUS_LEN);
+		Util.arrayCopy(bigStorage, (short) ISSUER_LEN, subject,(short) 0x00, SUBJECT_LEN);
+		Util.arrayCopy(bigStorage, (short) (SUBJECT_LEN + ISSUER_LEN), modulus,(short) 0x01, MODULUS_LEN);
 		Util.arrayCopy(bigStorage, (short) (SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN), exponent,(short) 0x00, EXPONENT_LEN);
 		Util.arrayCopy(bigStorage, (short) (SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN + EXPONENT_LEN), validFrom,(short) 0x00, DATE_LEN);
 		Util.arrayCopy(bigStorage, (short) (SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN + EXPONENT_LEN + DATE_LEN), validUntil,(short) 0x00, DATE_LEN);
 		Util.arrayCopy(bigStorage, (short) (SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN + EXPONENT_LEN + DATE_LEN + DATE_LEN), signature,(short) 0x00, SIGN_LEN);
 		
-		String issuerString;
+		byte[] dataToCheck = new byte[SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN + EXPONENT_LEN + DATE_LEN + DATE_LEN];
+		Arrays.fill(dataToCheck, (byte) 0);
+		Util.arrayCopy(bigStorage, (short) 0, dataToCheck, (short)0,(short) (SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN + EXPONENT_LEN + DATE_LEN + DATE_LEN));
+		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(signature));
+		System.out.println("DATA LEN: " + dataToCheck.length);
+		
+		
+		boolean verified = false;
+		boolean valid = false;
+		RSAPublicKey mainCaPublicKey = null;
 		try {
-			issuerString = new String(issuer,"UTF-8");
-			System.out.println("Card Issuer: " + issuerString);
-		} catch (UnsupportedEncodingException e) {
+			// now we need to verify if the certificate is correct
+			Signature SPcheck = Signature.getInstance("SHA256withRSA");	
+//			SPPublicKey = (RSAPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_512, false);
+//			SPPublicKey.setModulus(modulus,(short) 0, (short) modulus.length);
+//			SPPublicKey.setExponent(exponent,(short) 0,(short) exponent.length);
+
+			RSAPublicKeySpec spec = new RSAPublicKeySpec(new BigInteger(mainCAPublicModulus), new BigInteger(mainCAPublicExponent));
+			KeyFactory factory = KeyFactory.getInstance("RSA");
+			mainCaPublicKey = (RSAPublicKey) factory.generatePublic(spec);
+			SPcheck.initVerify((PublicKey) mainCaPublicKey);
+			
+			SPcheck.update(dataToCheck, 0, dataToCheck.length);
+			System.out.println(dataToCheck.length);
+			
+		    verified = SPcheck.verify(signature);
+		    System.out.println(verified);
+			
+			
+			//we need to check if the current date is in between the validity period;
+			String[] validStart = getDateAsString(validFrom);
+			String[] validTo = getDateAsString(validUntil);
+			SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd-HH-mm");
+			String lastValidationString = String.join("-", lastValidationTime);
+			String validFromString = String.join("-", validStart);
+			String validToString = String.join("-", validTo);
+			Date lastValidationDate = format.parse(lastValidationString);
+			Date validFromDate = format.parse(validFromString); 
+			Date validToDate = format.parse(validToString);
+			System.out.println("VALID FROM:" + validFromString);
+			System.out.println("LAST VALIDATION:" + lastValidationString);
+			System.out.println("VALID UNTIL:" + validToString);
+			
+			if(lastValidationDate.after(validFromDate) && lastValidationDate.before(validToDate)) {
+			   valid = true;
+			}
+			System.out.println(valid);
+
+		} catch (NoSuchAlgorithmException e) {
+			System.out.println("NoSuchAlgorithmException");
+		} catch (InvalidKeyException e) {
+			System.out.println("InvalidKeyException");
+		} catch (SignatureException e) {
+			System.out.println("SignatureException");
+		} catch (ParseException e) {
+			System.out.println("ParseException");
+		} catch (InvalidKeySpecException e) {
 			// TODO Auto-generated catch block
-			System.out.println("UnsupportedEncodingException");
+			System.out.println("InvalidKeySpecException");
+		}
+
+		if (!(verified && valid)){
+		//here the ABORT should happen
+			
+		}
+		System.out.println("HERE");
+		//otherwise we generate a new symmetric key
+		 KeyGenerator kgen;
+		 SecretKey key = null;
+		try {
+			//make sure this works on the card..
+			kgen = KeyGenerator.getInstance("AES");
+			//should this be 256 since the size of the keys we use are 256?
+	        kgen.init(128);
+	        key = (SecretKey) kgen.generateKey();
+		} catch (NoSuchAlgorithmException e) {
+
 		}
 		
-		System.out.println();
+		try {
+			Cipher rsaenc = Cipher.getInstance("RSA");
+			rsaenc.init(Cipher.ENCRYPT_MODE, (Key) mainCaPublicKey);
+			byte[] encriptedKey = rsaenc.doFinal(key.getEncoded());
+			
+			//we have to generate a challenge 
+			SecureRandom random = new SecureRandom();
+			byte[] values = new byte[4];
+			random.nextBytes(values);
+			
+			
+			
+			//we have to symmetrically encyprt the challenge and the subject
+			Cipher symenc = Cipher.getInstance("RSA");
+			symenc.init(Cipher.ENCRYPT_MODE, key);
+			byte[] msg = new byte[(20 + subject.length)];
+			System.arraycopy(values, 0, msg, 0, values.length);
+			System.arraycopy(subject, 0, msg, values.length, subject.length);
+			
+
+			byte[] encriptedchallengeSubject = symenc.doFinal(key.getEncoded());
+			
+		} catch (NoSuchAlgorithmException e) {
+		} catch (NoSuchPaddingException e) {
+		} catch (InvalidKeyException e) {
+		} catch (IllegalBlockSizeException e) {
+		} catch (BadPaddingException e) {
+		}
+
+		
+		System.out.println("SVIH");
 	    
 		
 	}
 	
-	
+	private String[] getDateAsString(byte[] dateAsByte){
+		String year = Integer.toString(dateAsByte[0] << 24 | (dateAsByte[1] & 0xFF) << 16 | (dateAsByte[2] & 0xFF) << 8 | (dateAsByte[3] & 0xFF));
+		String month = Integer.toString((int)dateAsByte[4]);
+		String day = Integer.toString((int)dateAsByte[5]);
+		String hour = Integer.toString((int)dateAsByte[6]);
+		String min = Integer.toString((int)dateAsByte[7]);
+		String[] timeString = {year,month,day,hour, min}; //THIS IS LIKE A NEW
+		
+		return timeString;
+		
+	}
 	
 	
 	/*
@@ -304,7 +461,6 @@ public class IdentityCard extends Applet {
 	 * This method is called when the applet is selected and an APDU arrives.
 	 */
 	public void process(APDU apdu) throws ISOException {
-		System.out.println("NEW APDU");
 		//A reference to the buffer, where the APDU data is stored, is retrieved.
 		byte[] buffer = apdu.getBuffer();
 		
@@ -315,7 +471,6 @@ public class IdentityCard extends Applet {
 		//Check whether the indicated class of instructions is compatible with this applet.
 		if (buffer[ISO7816.OFFSET_CLA] != IDENTITY_CARD_CLA){System.out.println("huh?");ISOException.throwIt(ISO7816.SW_CLA_NOT_SUPPORTED);};
 		//A switch statement is used to select a method depending on the instruction
-		System.out.println(buffer[ISO7816.OFFSET_INS]);
 		switch(buffer[ISO7816.OFFSET_INS]){
 		case VALIDATE_PIN_INS:
 			

@@ -42,10 +42,10 @@ public class Client {
 	private static final short SUBJECT_LEN = 16;
 	private static final short DATE_LEN = 8; 
 
-	private static final short EXPONENT_LEN = 64; 
-	private static final short MODULUS_LEN = 4; 
-	
-	private static final short SIGN_LEN = 4; 
+	private static final short EXPONENT_LEN = 3; 
+	private static final short MODULUS_LEN = 64; 
+
+	private static final short SIGN_LEN = 64; 
 	
 	
 	
@@ -81,6 +81,13 @@ public class Client {
 	            message = new byte[len - SIZE_OF_INT_IN_BYTES];
 	            dIn.readFully(message); // read the message
 	        }
+	        String year = Integer.toString(message[0] << 24 | (message[1] & 0xFF) << 16 | (message[2] & 0xFF) << 8 | (message[3] & 0xFF));
+			String month = Integer.toString((int)message[4]);
+			String day = Integer.toString((int)message[5]);
+			String hour = Integer.toString((int)message[6]);
+			String min = Integer.toString((int)message[7]);
+			
+			System.out.println(year+","+month+","+day+","+hour+","+min);
 	        byte[] toSend = new byte[len];
 	        System.arraycopy(length, 0, toSend, 0, SIZE_OF_INT_IN_BYTES);
 	        System.arraycopy(message, 0, toSend, SIZE_OF_INT_IN_BYTES, len - SIZE_OF_INT_IN_BYTES);
@@ -145,60 +152,14 @@ public class Client {
 		} catch (ClassNotFoundException e) {
 			e.printStackTrace();
 		}
-		byte[] bigBuffer = new byte[ISSUER_LEN + SUBJECT_LEN + MODULUS_LEN + EXPONENT_LEN + 2*DATE_LEN + SIGN_LEN];
-		byte[] issuer = new byte[ISSUER_LEN];
-		byte[] issuerBytes = certificate.getIssuer().getBytes("UTF-8");
-		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(issuerBytes));
-		System.arraycopy(issuerBytes, 0, issuer, 0, issuerBytes.length);
-		System.arraycopy(issuer, 0, bigBuffer, 0, ISSUER_LEN);
-		
-		byte[] subject = new byte[SUBJECT_LEN];
-		byte[] subjectBytes = certificate.getSubject().getBytes("UTF-8");
-		System.arraycopy(subjectBytes, 0, subject, 0, issuerBytes.length);
-		System.arraycopy(subject, 0, bigBuffer, ISSUER_LEN, SUBJECT_LEN);
-		
-		byte[] modulus = new byte[MODULUS_LEN];
-		byte[] modulusBytes = certificate.getPublicKeyModulus().toByteArray();
-		System.arraycopy(modulusBytes, 0, modulus, 0, modulusBytes.length);
-		System.arraycopy(modulus, 0, bigBuffer, ISSUER_LEN + SUBJECT_LEN, MODULUS_LEN);
-		
-		byte[] exponent = new byte[EXPONENT_LEN];
-		byte[] exponentBytes = certificate.getPublicKeyExponent().toByteArray();
-		byte[] shortenedExponent = Arrays.copyOfRange(exponentBytes, 1, exponentBytes.length);
-		System.out.println("Modulus Size: " + exponentBytes.length);
-		System.arraycopy(shortenedExponent, 0, exponent, 0, shortenedExponent.length);
-		System.arraycopy(exponent, 0, bigBuffer, ISSUER_LEN + SUBJECT_LEN + MODULUS_LEN, EXPONENT_LEN);
-		
-		byte[] validFrom = new byte[DATE_LEN];
-		String[] validFromString = certificate.getValidFrom();
-		byte[] yearBytes = ByteBuffer.allocate(SIZE_OF_INT_IN_BYTES).putInt(new Integer(validFromString[0])).array();
-		System.arraycopy(yearBytes, 0, validFrom, 0, SIZE_OF_INT_IN_BYTES);
-		validFrom[SIZE_OF_INT_IN_BYTES] = (byte) (int) new Integer(validFromString[1]);
-		validFrom[SIZE_OF_INT_IN_BYTES + 1] = (byte) (int) new Integer(validFromString[2]);
-		validFrom[SIZE_OF_INT_IN_BYTES + 2] = (byte) (int) new Integer(validFromString[3]);
-		validFrom[SIZE_OF_INT_IN_BYTES + 3] = (byte) (int) new Integer(validFromString[4]);
-		System.arraycopy(validFrom, 0, bigBuffer, ISSUER_LEN + SUBJECT_LEN + MODULUS_LEN + EXPONENT_LEN, DATE_LEN);
-		
-		byte[] validUntil = new byte[DATE_LEN];
-		String[] validUntilString = certificate.getValidFrom();
-		yearBytes = ByteBuffer.allocate(SIZE_OF_INT_IN_BYTES).putInt(new Integer(validFromString[0])).array();
-		System.arraycopy(yearBytes, 0, validUntil, 0, SIZE_OF_INT_IN_BYTES);
-		validUntil[SIZE_OF_INT_IN_BYTES] = (byte) (int) new Integer(validUntilString[1]);
-		validUntil[SIZE_OF_INT_IN_BYTES + 1] = (byte) (int) new Integer(validUntilString[2]);
-		validUntil[SIZE_OF_INT_IN_BYTES + 2] = (byte) (int) new Integer(validUntilString[3]);
-		validUntil[SIZE_OF_INT_IN_BYTES + 3] = (byte) (int) new Integer(validUntilString[4]);
-		System.arraycopy(validUntil, 0, bigBuffer, ISSUER_LEN + SUBJECT_LEN + MODULUS_LEN + EXPONENT_LEN + DATE_LEN, DATE_LEN);
-		
-		byte[] signature = certificate.getSignature();
-		System.arraycopy(signature, 0, bigBuffer, ISSUER_LEN + SUBJECT_LEN + MODULUS_LEN + EXPONENT_LEN + DATE_LEN + DATE_LEN, SIGN_LEN);
-
+		byte[] bigBuffer = certificate.getAsBytesWithSign();
+				
 		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(bigBuffer));
 		System.out.println("Sending a message of " + bigBuffer.length + " bytes");
 		byte[] buffer = new byte[250];
 		//Divide in chunks of 250 bytes
 		for (int i = 0; i < Math.ceil((double)bigBuffer.length/250); i++) {
 			System.arraycopy(bigBuffer, 250*i, buffer, 0, Math.min(250, bigBuffer.length - 250*i));
-			System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(buffer));
 			a = new CommandAPDU(IDENTITY_CARD_CLA, AUTHENTICATE_SP_STEP, 0x00, 0x00, buffer);
 			r = c.transmit(a);
 		}
