@@ -64,11 +64,11 @@ public class TimeService {
 						timeBytes[i] = (byte) intTime[i-3];
 					}
 
-					MessageDigest md = MessageDigest.getInstance("SHA-256");
+					MessageDigest md = MessageDigest.getInstance("SHA-1");
 
 					byte[] hashedTime = md.digest(timeBytes);
 
-					Signature signEngine = Signature.getInstance("SHA256withRSA");
+					Signature signEngine = Signature.getInstance("SHA1withRSA");
 					signEngine.initSign(timestampPrivateKey);
 					signEngine.update(hashedTime);
 //					System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(timeBytes));

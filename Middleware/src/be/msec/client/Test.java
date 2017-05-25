@@ -67,7 +67,7 @@ public class Test {
 		keyStore.load(fis, "ThisIs4V3ryS4f3Pa$$w0rd".toCharArray());
 		fis.close();
 
-		String subject = "egov2";
+		String subject = "timestamp";
 		
 		Certificate selfSignedCert = keyStore.getCertificate(subject);
 		RSAPublicKey pubKey = (RSAPublicKey) selfSignedCert.getPublicKey();
@@ -124,7 +124,7 @@ public class Test {
 			fis.close();
 			
 			PrivateKey caPrivKey = (PrivateKey) keyStore.getKey(name, "test".toCharArray());
-			Signature signEngine = Signature.getInstance("SHA256withRSA");
+			Signature signEngine = Signature.getInstance("SHA1withRSA");
 			signEngine.initSign(caPrivKey);
 			signEngine.update(cert.getAsBytesWithoutSign());
 			byte[] signature = signEngine.sign();

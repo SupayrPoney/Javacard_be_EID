@@ -45,7 +45,6 @@ import javacard.framework.ISOException;
 import javacard.framework.OwnerPIN;
 import javacard.framework.Util;
 import javacard.security.KeyBuilder;
-//import javacard.security.RSAPublicKey;
 //import javacard.security.Signature;
 
 
@@ -236,43 +235,42 @@ public class IdentityCard extends Applet {
         Util.arrayCopy(bigStorage, (short) sizeOfLen, timeToVerify, (short) 0, (short)(sizeOfTime));
         Util.arrayCopy(bigStorage, (short) (sizeOfLen + sizeOfTime), sigToVerify, (short) 0, (short)(len - sizeOfLen - sizeOfTime));
 		
-		byte[] test = new byte[govTimePublicModulus.length + 1];
-		Util.arrayCopy(govTimePublicModulus, (short)0, test, (short)1, (short)govTimePublicModulus.length);
-		test[0] = (short) 0;
-		RSAPublicKeySpec spec = new RSAPublicKeySpec(new BigInteger(test), new BigInteger(govTimePublicExponent));
+		byte[] uncroppedGovTimePublicModulus = new byte[govTimePublicModulus.length + 1];
+		Util.arrayCopy(govTimePublicModulus, (short)0, uncroppedGovTimePublicModulus, (short)1, (short)govTimePublicModulus.length);
+		uncroppedGovTimePublicModulus[0] = (short) 0;
+//		RSAPublicKeySpec spec = new RSAPublicKeySpec(new BigInteger(uncroppedGovTimePublicModulus), new BigInteger(govTimePublicExponent));
+////		System.out.println(new BigInteger(govTimePublicModulus));
+//		KeyFactory factory = KeyFactory.getInstance("RSA");
+//        RSAPublicKey timestampPubKey =  (RSAPublicKey) factory.generatePublic(spec);
+//
+//		Signature signEngine = Signature.getInstance("SHA256withRSA");
+//		signEngine.initVerify(timestampPubKey);
+//		MessageDigest md = MessageDigest.getInstance("SHA-256");
+//
+//		byte[] hashedTime = md.digest(timeToVerify);
+//		signEngine.update(hashedTime, 0, hashedTime.length);
+//		
+//		boolean verifies = signEngine.verify(sigToVerify);
 //		System.out.println(new BigInteger(govTimePublicModulus));
-		KeyFactory factory = KeyFactory.getInstance("RSA");
-        RSAPublicKey timestampPubKey =  (RSAPublicKey) factory.generatePublic(spec);
+		javacard.security.RSAPublicKey timestampPubKey = (javacard.security.RSAPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_512, false);
 
-		Signature signEngine = Signature.getInstance("SHA256withRSA");
-		signEngine.initVerify(timestampPubKey);
-		MessageDigest md = MessageDigest.getInstance("SHA-256");
-
-		byte[] hashedTime = md.digest(timeToVerify);
-		signEngine.update(hashedTime, 0, hashedTime.length);
-		
-		boolean verifies = signEngine.verify(sigToVerify);
-//		System.out.println(new BigInteger(govTimePublicModulus));
-//        RSAPublicKey timestampPubKey = (RSAPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_512, false);
-
-//        timestampPubKey.setExponent(govTimePublicExponent, (short) 0, (short) govTimePublicExponent.length);
-//        timestampPubKey.setModulus(govTimePublicModulus, (short) 0, (short) govTimePublicModulus.length);
+        timestampPubKey.setExponent(govTimePublicExponent, (short) 0, (short) govTimePublicExponent.length);
+        timestampPubKey.setModulus(govTimePublicModulus, (short) 0, (short) govTimePublicModulus.length);
  		//System.out.println("MODULUS:" + timestampPubKey.getModulus());
 		//System.out.println("EXPONENT:" + timestampPubKey.getPublicExponent());
 		
-//		Signature signEngine = Signature.getInstance(Signature.ALG_RSA_SHA_PKCS1, false);
-//		System.out.println("VERIF2TER");
-//		signEngine.init( timestampPubKey, Signature.MODE_VERIFY);
-//        System.out.println("VERIF2QUAT");
-//		
-//		MessageDigest md = MessageDigest.getInstance("SHA-1");
-//		System.out.println("VERIF3");
-//
-//		byte[] hashedTime = md.digest(timeToVerify);
-//		signEngine.update(hashedTime, (short) 0, (short) hashedTime.length);
-//		
-//		boolean verifies = signEngine.verify(hashedTime, (short) 0, (short) hashedTime.length, sigToVerify, (short) 0, (short)sigToVerify.length);
-		//System.out.println(verifies);
+        javacard.security.Signature signEngine = javacard.security.Signature.getInstance(javacard.security.Signature.ALG_RSA_SHA_PKCS1, false);
+		System.out.println("VERIF2TER");
+		signEngine.init( timestampPubKey, javacard.security.Signature.MODE_VERIFY);
+        System.out.println("VERIF2QUAT");
+		
+		MessageDigest md = MessageDigest.getInstance("SHA-1");
+		System.out.println("VERIF3");
+
+		byte[] hashedTime = md.digest(timeToVerify);
+		//signEngine.update(hashedTime, (short) 0, (short) hashedTime.length);
+		boolean verifies = signEngine.verify(hashedTime, (short) 0, (short) hashedTime.length, sigToVerify, (short) 0, (short)sigToVerify.length);
+		System.out.println("VERIFIES:" + verifies);
 		
 		String year = Integer.toString(timeToVerify[0] << 24 | (timeToVerify[1] & 0xFF) << 16 | (timeToVerify[2] & 0xFF) << 8 | (timeToVerify[3] & 0xFF));
 		String month = Integer.toString((int)(timeToVerify[4]& 0xFF));
@@ -384,7 +382,7 @@ public class IdentityCard extends Applet {
 		RSAPublicKey mainCaPublicKey = null;
 		try {
 			// now we need to verify if the certificate is correct
-			Signature SPcheck = Signature.getInstance("SHA256withRSA");	
+			Signature SPcheck = Signature.getInstance("SHA1withRSA");	
 //			SPPublicKey = (RSAPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_512, false);
 //			SPPublicKey.setModulus(modulus,(short) 0, (short) modulus.length);
 //			SPPublicKey.setExponent(exponent,(short) 0,(short) exponent.length);
