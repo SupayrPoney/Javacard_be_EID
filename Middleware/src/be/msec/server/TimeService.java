@@ -52,6 +52,7 @@ public class TimeService {
 	            	LocalDateTime now = LocalDateTime.now();
 					String outputTime = dtf.format(now);
 					String[] time = outputTime.split("-");
+					System.out.println(outputTime);
 					int[] intTime = new int[time.length];
 					for (int i = 0; i < intTime.length; i++) {
 						intTime[i] = Integer.parseInt(time[i]);
@@ -60,7 +61,7 @@ public class TimeService {
 					byte[] timeBytes = new byte[8];
 					System.arraycopy(yearBytes, 0, timeBytes, 0, 4);
 					for (int i = 4; i < timeBytes.length; i++) {
-						timeBytes[i] = (byte) intTime[i-4];
+						timeBytes[i] = (byte) intTime[i-3];
 					}
 
 					MessageDigest md = MessageDigest.getInstance("SHA-256");
@@ -70,8 +71,6 @@ public class TimeService {
 					Signature signEngine = Signature.getInstance("SHA256withRSA");
 					signEngine.initSign(timestampPrivateKey);
 					signEngine.update(hashedTime);
-					System.out.println("MODULUS:" + pubKey.getModulus());
-					System.out.println("EXPONENT:" + pubKey.getPublicExponent());
 //					System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(timeBytes));
 
 					byte[] signature = signEngine.sign();
@@ -79,7 +78,6 @@ public class TimeService {
 					int length = signature.length + timeBytes.length + 4;
 					byte[] lenBytes = ByteBuffer.allocate(4).putInt(length).array();
 					byte[] output = new byte[length];
-					System.out.println(length);
 					System.arraycopy(lenBytes, 0, output, 0, lenBytes.length);
 					System.arraycopy(timeBytes, 0, output, lenBytes.length, timeBytes.length);
 					System.arraycopy(signature, 0, output, timeBytes.length + lenBytes.length, signature.length);
