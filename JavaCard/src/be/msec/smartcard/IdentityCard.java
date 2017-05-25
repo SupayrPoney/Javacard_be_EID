@@ -89,8 +89,10 @@ public class IdentityCard extends Applet {
 	private final static short SW_VERIFICATION_FAILED = 0x6300;
 	private final static short SW_PIN_VERIFICATION_REQUIRED = 0x6301;
 	private final static short SW_TIME_UPDATE_FAILED = 0x6302;
+	private final static short SW_TIME_SIGNATURE_VERIFICATION_FAILED = 0x6304;
 
 	private byte[] symKey = new byte[32];
+	private byte[] hashedArray = new byte[32];
 	private byte[] aesEncryptBytes = new byte[16];
 	private byte[] challenge = new byte[SIZE_OF_CHALLENGE];
 	
@@ -260,17 +262,16 @@ public class IdentityCard extends Applet {
 		//System.out.println("EXPONENT:" + timestampPubKey.getPublicExponent());
 		
         javacard.security.Signature signEngine = javacard.security.Signature.getInstance(javacard.security.Signature.ALG_RSA_SHA_PKCS1, false);
-		System.out.println("VERIF2TER");
 		signEngine.init( timestampPubKey, javacard.security.Signature.MODE_VERIFY);
-        System.out.println("VERIF2QUAT");
 		
-		MessageDigest md = MessageDigest.getInstance("SHA-1");
-		System.out.println("VERIF3");
-
-		byte[] hashedTime = md.digest(timeToVerify);
+		javacard.security.MessageDigest md = javacard.security.MessageDigest.getInstance(javacard.security.MessageDigest.ALG_SHA_256, false);
+		md.reset();
+		md.doFinal(timeToVerify, (short) 0,(short)timeToVerify.length, hashedArray, (short) 0);
 		//signEngine.update(hashedTime, (short) 0, (short) hashedTime.length);
-		boolean verifies = signEngine.verify(hashedTime, (short) 0, (short) hashedTime.length, sigToVerify, (short) 0, (short)sigToVerify.length);
-		System.out.println("VERIFIES:" + verifies);
+		boolean verifies = signEngine.verify(hashedArray, (short) 0, (short) hashedArray.length, sigToVerify, (short) 0, (short)sigToVerify.length);
+		if (! verifies){
+			ISOException.throwIt(SW_TIME_SIGNATURE_VERIFICATION_FAILED);
+		}
 		
 		String year = Integer.toString(timeToVerify[0] << 24 | (timeToVerify[1] & 0xFF) << 16 | (timeToVerify[2] & 0xFF) << 8 | (timeToVerify[3] & 0xFF));
 		String month = Integer.toString((int)(timeToVerify[4]& 0xFF));
@@ -291,10 +292,6 @@ public class IdentityCard extends Applet {
 			}
 			else{
 				lastValidationTime = new String[]{year,month,day,hour, min};
-				for (int j = 0; j < lastValidationTime.length; j++) {
-					System.out.println(j+","+lastValidationTime[j]);
-				}
-				System.out.println("UPDATINGTIME WITH: "+ String.join("-",lastValidationTime));
 			}
 			apdu.setOutgoing();
 			apdu.setOutgoingLength((short)1);

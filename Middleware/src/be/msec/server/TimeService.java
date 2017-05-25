@@ -64,7 +64,7 @@ public class TimeService {
 						timeBytes[i] = (byte) intTime[i-3];
 					}
 
-					MessageDigest md = MessageDigest.getInstance("SHA-1");
+					MessageDigest md = MessageDigest.getInstance("SHA-256");
 
 					byte[] hashedTime = md.digest(timeBytes);
 

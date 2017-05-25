@@ -101,7 +101,7 @@ public class Client {
 			byte[] dataOut = Arrays.copyOfRange(r.getData(),(short) 5 + len, 5 + len+1); 
 			response = dataOut[0];			
 		}
-		if (response == 1) {
+		if (r.getSW() == 0x9000) {
 			System.out.println("SUCCESS");
 			// authenticateSP
 			Socket clientSocketSP = new Socket("localhost", 9999);
