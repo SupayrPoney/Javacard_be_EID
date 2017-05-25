@@ -43,9 +43,9 @@ public class SPSelection extends JFrame {
 			public void run() {
 				try {
 					HashMap<String, String[]> allServices = new HashMap<String, String[]>();
-					allServices.put("eGov", new String[]{"eGov1","eGov2"});
+					allServices.put("eGov", new String[]{"egov1","egov2"});
 					allServices.put("SocNet", new String[]{"serviceSocNet1","serviceSocNet2"});
-					allServices.put("default", new String[]{"serviceDefault1","serviceDefault2"});
+					//allServices.put("default", new String[]{"serviceDefault1","serviceDefault2"});
 					allServices.put("health", new String[]{"healthService1","healthService2"});
 					SPSelection frame = new SPSelection(allServices);
 					frame.setVisible(true);
