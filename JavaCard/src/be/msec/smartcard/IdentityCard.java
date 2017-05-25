@@ -6,6 +6,8 @@ import java.io.ObjectInputStream;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Array;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.Key;
 import java.security.KeyFactory;
@@ -32,6 +34,8 @@ import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.KeyGenerator;
 import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 
 import helpers.HomeMadeCertificate;
 import javacard.framework.APDU;
@@ -64,7 +68,8 @@ public class IdentityCard extends Applet {
 	private static final byte VALIDATE_TIME = 0x30;
 	private static final byte VERIFY_TIME_SIG = 0x32;
 	private static final byte AUTHENTICATE_SP = 0x34;
-	private static final int AUTHENTICATE_SP_STEP = 0x36;
+	private static final byte AUTHENTICATE_SP_STEP = 0x36;
+	private static final byte END_AUTH = 0x38;
 	
 	private static final short ISSUER_LEN = 16; 
 	private static final short SUBJECT_LEN = 16;
@@ -75,6 +80,10 @@ public class IdentityCard extends Applet {
 
 	private static final short SIGN_LEN = 64; 
 	
+	private static boolean auth = false;
+
+	private static final short SIZE_OF_CHALLENGE = 2;
+	
 	private final static byte PIN_TRY_LIMIT =(byte)0x03;
 	private final static byte PIN_SIZE =(byte)0x04;
 	
@@ -82,6 +91,9 @@ public class IdentityCard extends Applet {
 	private final static short SW_PIN_VERIFICATION_REQUIRED = 0x6301;
 	private final static short SW_TIME_UPDATE_FAILED = 0x6302;
 
+	private byte[] symKey = new byte[32];
+	private byte[] aesEncryptBytes = new byte[16];
+	private byte[] challenge = new byte[SIZE_OF_CHALLENGE];
 	
 	private byte[] serial = new byte[]{0x30, 0x35, 0x37, 0x36, 0x39, 0x30, 0x31, 0x05};
 	private String javacardPrivateExponent = "4019248479486344703173865994833247965130855891297001843442511551221472431764138438478319727380832243535639804382400663422189381536828238855709495144508993";
@@ -107,6 +119,7 @@ public class IdentityCard extends Applet {
 	private byte[] storage = new byte[]{0x30, 0x35, 0x37, 0x36, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04};
 	private byte[] bigStorage = new byte[1024];
 	private byte[] byteToInt = new byte[]{0x00,0x00,0x00,0x00, 0x04, 0x04};
+	private byte[] fourBytes = new byte[4];
 	
 	private short authStep = 0;
 	
@@ -275,8 +288,6 @@ public class IdentityCard extends Applet {
 			Date timeDate = format.parse(timeString);
 			Date lastValidationDate = format.parse(lastValidationString);
 			short response = 1;
-			System.out.println("time>VALIDATION: "+(timeDate.getTime() > lastValidationDate.getTime()));
-			System.out.println("VERIFIES:" +verifies);
 			if(!verifies || !(timeDate.getTime() > lastValidationDate.getTime())){
 				response = 0;
 			}
@@ -297,10 +308,53 @@ public class IdentityCard extends Applet {
 
 		
 	}
+
 	
+	private void auth_step(APDU apdu) {
+		if (authStep == 0) {
+			Arrays.fill(bigStorage, (byte) 0);
+		}
+		byte[] buffer = apdu.getBuffer();
+		short bytesLeft = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
+		short START = 0;
+		Util.arrayCopy(buffer, START, storage, START, (short)8);
+		short readCount = apdu.setIncomingAndReceive();
+		short i = (short) (250*authStep);
+		while ( bytesLeft > 0){
+			Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, bigStorage, i, readCount);
+			bytesLeft -= readCount;
+			i+=readCount;
+			readCount = apdu.receiveBytes(ISO7816.OFFSET_CDATA);
+		}
+		
+		
+		authStep += 1;
+		apdu.setOutgoing();
+		System.out.println((short)buffer.length);
+		apdu.setOutgoingLength((short)buffer.length);
+		apdu.sendBytesLong(buffer,(short)0,(short)buffer.length);    
+		
+	}
+	private byte[] intToByte(int integer){
+		return ByteBuffer.allocate(4).putInt(integer).array();
+	}
 	
 	private void authenticate_sp(APDU apdu){
 		authStep = 0;
+		byte[] buffer = apdu.getBuffer();
+		short bytesLeft = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
+		short START = 0;
+		Util.arrayCopy(buffer, START, storage, START, (short)8);
+		short readCount = apdu.setIncomingAndReceive();
+		short i = (short) (250*authStep);
+		while ( bytesLeft > 0){
+			Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, storage, i, readCount);
+			bytesLeft -= readCount;
+			i+=readCount;
+			readCount = apdu.receiveBytes(ISO7816.OFFSET_CDATA);
+		}
+		
+		byte[] response = null;
 		System.out.println("AUTH_SP");
 		byte[] issuer = new byte[ISSUER_LEN];
 		byte[] subject = new byte[SUBJECT_LEN];
@@ -323,7 +377,6 @@ public class IdentityCard extends Applet {
 		Arrays.fill(dataToCheck, (byte) 0);
 		Util.arrayCopy(bigStorage, (short) 0, dataToCheck, (short)0,(short) (SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN + EXPONENT_LEN + DATE_LEN + DATE_LEN));
 		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(signature));
-		System.out.println("DATA LEN: " + dataToCheck.length);
 		
 		
 		boolean verified = false;
@@ -358,9 +411,6 @@ public class IdentityCard extends Applet {
 			Date lastValidationDate = format.parse(lastValidationString);
 			Date validFromDate = format.parse(validFromString); 
 			Date validToDate = format.parse(validToString);
-			System.out.println("VALID FROM:" + validFromString);
-			System.out.println("LAST VALIDATION:" + lastValidationString);
-			System.out.println("VALID UNTIL:" + validToString);
 			
 			if(lastValidationDate.after(validFromDate) && lastValidationDate.before(validToDate)) {
 			   valid = true;
@@ -392,44 +442,63 @@ public class IdentityCard extends Applet {
 			//make sure this works on the card..
 			kgen = KeyGenerator.getInstance("AES");
 			//should this be 256 since the size of the keys we use are 256?
-	        kgen.init(128);
+	        kgen.init(256);
 	        key = (SecretKey) kgen.generateKey();
+	        symKey = key.getEncoded();
 		} catch (NoSuchAlgorithmException e) {
-
+			System.out.println("NoSuchAlgorithmException");
 		}
 		
 		try {
 			Cipher rsaenc = Cipher.getInstance("RSA");
-			rsaenc.init(Cipher.ENCRYPT_MODE, (Key) mainCaPublicKey);
-			byte[] encriptedKey = rsaenc.doFinal(key.getEncoded());
+			RSAPublicKeySpec spec = new RSAPublicKeySpec(new BigInteger(modulus), new BigInteger(exponent));
+			KeyFactory factory = KeyFactory.getInstance("RSA");
+			RSAPublicKey spPublicKey = (RSAPublicKey) factory.generatePublic(spec);
+			rsaenc.init(Cipher.ENCRYPT_MODE, spPublicKey);
+			byte[] encryptedKey = rsaenc.doFinal(key.getEncoded());
 			
 			//we have to generate a challenge 
 			SecureRandom random = new SecureRandom();
-			byte[] values = new byte[4];
-			random.nextBytes(values);
-			
-			
-			
-			//we have to symmetrically encyprt the challenge and the subject
-			Cipher symenc = Cipher.getInstance("RSA");
-			symenc.init(Cipher.ENCRYPT_MODE, key);
-			byte[] msg = new byte[(20 + subject.length)];
-			System.arraycopy(values, 0, msg, 0, values.length);
-			System.arraycopy(subject, 0, msg, values.length, subject.length);
-			
+			random.nextBytes(challenge);
 
-			byte[] encriptedchallengeSubject = symenc.doFinal(key.getEncoded());
+			IvParameterSpec iv = new IvParameterSpec("0000111122223333".getBytes("UTF-8"));
+			Cipher aesenc = Cipher.getInstance("AES/CBC/PKCS5PADDING");
+			byte[] dataToEncrypt = new byte[SIZE_OF_CHALLENGE + SUBJECT_LEN]; 
+			Util.arrayCopy(challenge,(short) 0, dataToEncrypt,(short) 0, SIZE_OF_CHALLENGE);
+			Util.arrayCopy(subject,(short)0, dataToEncrypt, SIZE_OF_CHALLENGE, SUBJECT_LEN);
+			aesenc.init(Cipher.ENCRYPT_MODE, key, iv);
+			byte[] encryptedChallenge = aesenc.doFinal(dataToEncrypt);
+			response = new byte[4 + 4 + encryptedKey.length +  encryptedChallenge.length];
+			Util.arrayCopy(intToByte(encryptedKey.length), (short) 0, response, (short) 0, (short) 4);
+			Util.arrayCopy(intToByte(encryptedChallenge.length), (short) 0, response, (short) 4, (short) 4);
+			Util.arrayCopy(encryptedKey, (short) 0, response, (short) 8,(short) encryptedKey.length);
+			Util.arrayCopy(encryptedChallenge, (short) 0, response, (short) (encryptedKey.length +8),(short) encryptedChallenge.length);
+			System.out.println(encryptedChallenge.length);
+			System.out.println("END OF AUTH 1");
 			
 		} catch (NoSuchAlgorithmException e) {
+			System.out.println("NoSuchAlgorithmException");
 		} catch (NoSuchPaddingException e) {
+			System.out.println("NoSuchPaddingException");
 		} catch (InvalidKeyException e) {
+			System.out.println("InvalidKeyException");
 		} catch (IllegalBlockSizeException e) {
+			System.out.println("IllegalBlockSizeException");
 		} catch (BadPaddingException e) {
-		}
+			System.out.println("BadPaddingException");
+		} catch (InvalidAlgorithmParameterException e) {
+			System.out.println("InvalidAlgorithmParameterException");
+		} catch (UnsupportedEncodingException e) {
+			System.out.println("UnsupportedEncodingException");
+		} catch (InvalidKeySpecException e) {
+			System.out.println("InvalidKeySpecException");
 
-		
-		System.out.println("SVIH");
-	    
+		}
+		System.out.println("RESPONSE LENGTH: "+response.length);
+		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(response));
+		apdu.setOutgoing();
+		apdu.setOutgoingLength((short)response.length);
+		apdu.sendBytesLong(response,(short)0,(short)response.length);    
 		
 	}
 	
@@ -495,9 +564,13 @@ public class IdentityCard extends Applet {
 			break;
 		case AUTHENTICATE_SP: 
 			authenticate_sp(apdu);
-			
+			break;
 		case AUTHENTICATE_SP_STEP:
 			auth_step(apdu);
+			break;
+		case END_AUTH:
+			end_auth(apdu);
+			break;
 			
 		//If no matching instructions are found it is indicated in the status word of the response.
 		//This can be done by using this method. As an argument a short is given that indicates
@@ -507,27 +580,71 @@ public class IdentityCard extends Applet {
 	}
 
 	
-	
-	private void auth_step(APDU apdu) {
-		if (authStep == 0) {
-			Arrays.fill(bigStorage, (byte) 0);
-		}
+
+	private void end_auth(APDU apdu) {
+		System.out.println("AUTH");
 		byte[] buffer = apdu.getBuffer();
-		short bytesLeft = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
-		short START = 0;
-		Util.arrayCopy(buffer, START, storage, START, (short)8);
-		short readCount = apdu.setIncomingAndReceive();
-		short i = (short) (250*authStep);
-		while ( bytesLeft > 0){
-			Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, bigStorage, i, readCount);
-			bytesLeft -= readCount;
-			i+=readCount;
-			readCount = apdu.receiveBytes(ISO7816.OFFSET_CDATA);
+		System.out.println("AUTH1");
+		System.out.println(symKey.length);
+		SecretKey symetricKey = new SecretKeySpec(symKey, "AES");
+		Util.arrayCopy(buffer, (short)ISO7816.OFFSET_CDATA, fourBytes, (short)0, (short)4);
+		short size = (short) bytesToInt(fourBytes, 0);
+		System.out.println(size);
+		byte[] encryptedResponse = new byte[size];
+		Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA + 4), encryptedResponse,(short) 0, size);
+
+        IvParameterSpec iv = null;
+		System.out.println("AUTH2");
+		try {
+			iv = new IvParameterSpec("0000111122223333".getBytes("UTF-8"));
+		} catch (UnsupportedEncodingException e) {
+			System.out.println("UnsupportedEncodingException");
 		}
+		Cipher aesdec = null;
+		try {
+			aesdec = Cipher.getInstance("AES/CBC/PKCS5PADDING");
+		} catch (NoSuchAlgorithmException e) {
+			System.out.println("NoSuchAlgorithmException");
+		} catch (NoSuchPaddingException e) {
+			System.out.println("NoSuchPaddingException");
+		}
+		System.out.println("AUTH3");
+		System.out.println(symetricKey.getEncoded());
+		try {
+			aesdec.init(Cipher.DECRYPT_MODE, symetricKey, iv);
+		} catch (InvalidKeyException e) {
+			System.out.println("InvalidKeyException");
+		} catch (InvalidAlgorithmParameterException e) {
+			System.out.println("InvalidAlgorithmParameterException");
+		}
+		byte[] response = null;
+		System.out.println(encryptedResponse.length);
+		Util.arrayCopy(encryptedResponse, (short) 0, aesEncryptBytes, (short) 0, (short)aesEncryptBytes.length);
+		System.out.println(aesEncryptBytes.length);
+		try {
+			response = aesdec.doFinal(aesEncryptBytes);
+		} catch (IllegalBlockSizeException e) {
+			System.out.println("IllegalBlockSizeException");
+		} catch (BadPaddingException e) {
+			System.out.println("BadPaddingException");
+		}
+		System.out.println("AUTH4");
+		System.out.println(response.length);
+		int responseShort =  (response[0] << 8 | (response[1] & 0xFF));
+		System.out.println("AUTH4.5:"+ responseShort);
+		short previousChallenge = (short)  (challenge[0] << 8 | (challenge[1] & 0xFF));
+		System.out.println(responseShort + "-" + previousChallenge);
+		if (responseShort != previousChallenge+1) {
+			return;
+		}
+		System.out.println("AUTH5");
+		auth = true;
+		System.out.println("AUTH: " + auth);
 		
-		
-		authStep += 1;
-		
+	}
+	
+	private static int bytesToInt(byte[] bytes, int offset){
+		return bytes[offset] << 24 | (bytes[offset+1] & 0xFF) << 16 | (bytes[offset+2] & 0xFF) << 8 | (bytes[offset+3] & 0xFF);
 	}
 
 	private void echo(APDU apdu){
