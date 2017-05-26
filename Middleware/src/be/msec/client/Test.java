@@ -67,7 +67,7 @@ public class Test {
 		keyStore.load(fis, "ThisIs4V3ryS4f3Pa$$w0rd".toCharArray());
 		fis.close();
 
-		String subject = "timestamp";
+		String subject = "javacard";
 		
 		Certificate selfSignedCert = keyStore.getCertificate(subject);
 		RSAPublicKey pubKey = (RSAPublicKey) selfSignedCert.getPublicKey();
@@ -103,6 +103,8 @@ public class Test {
 		HomeMadeCertificate cert = new HomeMadeCertificate(subjectBytes, subjectBytes, exponent, modulus, sign, validFromBytes, validUntilBytes);
 
 		signCertificate(cert);
+		
+		
 		cert.save();
 		
 //		
@@ -111,6 +113,14 @@ public class Test {
 //		System.out.println(Arrays.equals(deserCert.getSignature(),data));
 
 	      
+	}
+	public static void byteArrayToPrintable(byte[] input){
+		System.out.print("{");
+		for (byte b : input) {
+			System.out.print(b + ",");
+		}
+
+		System.out.println("}");
 	}
 
 	private static void signCertificate(HomeMadeCertificate cert) {
@@ -130,6 +140,8 @@ public class Test {
 			byte[] signature = signEngine.sign();
 			System.out.println(signature.length);
 			cert.setSignature(signature);
+			System.out.println(cert.getAsBytesWithSign().length);
+			byteArrayToPrintable(cert.getAsBytesWithSign());
 		} catch (Exception e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();

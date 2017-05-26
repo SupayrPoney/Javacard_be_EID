@@ -9,6 +9,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
+import java.io.UnsupportedEncodingException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.ByteBuffer;
@@ -19,6 +20,7 @@ import java.security.KeyStoreException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
+import java.security.SecureRandom;
 import java.security.Signature;
 import java.security.UnrecoverableKeyException;
 import java.security.cert.CertificateException;
@@ -172,30 +174,39 @@ public class ServiceProvider extends Thread{
 				
 			//Step 2.10
 	            IvParameterSpec iv = new IvParameterSpec("0000111122223333".getBytes("UTF-8"));
-				Cipher aesdec = Cipher.getInstance("AES/CBC/PKCS5PADDING");
+				Cipher aesdec = Cipher.getInstance("AES/CBC/NOPADDING");
 				aesdec.init(Cipher.DECRYPT_MODE, symKey, iv);
-				byte[] challengeAndSubject = aesdec.doFinal(encryptedChallenge);
+				byte[] challengeAndSubjectPadded = aesdec.doFinal(encryptedChallenge);
+				byte[] challengeAndSubject = new byte[SIZE_OF_CHALLENGE+SIZE_OF_SUBJECT];
+				System.arraycopy(challengeAndSubjectPadded, 0, challengeAndSubject, 0, challengeAndSubject.length);
 				byte[] challengeBytes = Arrays.copyOfRange(challengeAndSubject, 0, SIZE_OF_CHALLENGE);
 				byte[] certSubjectBytes = Arrays.copyOfRange(challengeAndSubject, SIZE_OF_CHALLENGE, SIZE_OF_CHALLENGE + SIZE_OF_SUBJECT);
 				String certSubject = new String(certSubjectBytes, "UTF-8");
 				
+				
 			// Step 2.11
+				System.out.println("HERE SP LEN");
 				System.out.println(this.SPName.length() + "-" + certSubject.length());
 				byte[] spNameBuffer = new byte[SIZE_OF_SUBJECT];
 				System.arraycopy(SPName.getBytes(), 0, spNameBuffer, 0, SPName.getBytes().length);
 				String paddedSPName = new String(spNameBuffer);
 				if (!paddedSPName.equals(certSubject)) {
+					System.out.println("Test");
 					return;
 				}
 				
 			// Step 2.12
 		        short challenge = (short) (challengeBytes[0] << 8 | (challengeBytes[1] & 0xFF));
 		        short newChallenge = (short) (challenge + 1);
-				Cipher aesenc = Cipher.getInstance("AES/CBC/PKCS5PADDING");
+				Cipher aesenc = Cipher.getInstance("AES/CBC/NOPADDING");
 				aesenc.init(Cipher.ENCRYPT_MODE, symKey, iv);
 				byte[] newChallengeBytes = ByteBuffer.allocate(2).putShort(newChallenge).array();
 				System.out.println(newChallengeBytes.length);
-				byte[] encryptedResponse = aesenc.doFinal(newChallengeBytes);
+				byte[] paddedNewChallenge = new byte[16];
+				Arrays.fill(paddedNewChallenge, (byte) 0);
+				System.arraycopy(newChallengeBytes, 0, paddedNewChallenge, 0, newChallengeBytes.length);
+				
+				byte[] encryptedResponse = aesenc.doFinal(paddedNewChallenge);
 
 				command[0] = (byte) 2;
 				lengthToSend = 1 + 4 + encryptedResponse.length;
@@ -207,7 +218,10 @@ public class ServiceProvider extends Thread{
 				System.out.println(dataToSend.length);
 				System.out.println(symKey.getEncoded());
 				outToClient.write(dataToSend);
+				connectionSocket.close();
 		        
+			//step 3
+				step3(welcomeSocket, symKey);
 				
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
@@ -240,6 +254,78 @@ public class ServiceProvider extends Thread{
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			} 
+    }
+	
+	private void step3( ServerSocket welcomeSocket, SecretKey symKey){
+		Socket connectionSocket = null;
+		try {
+			connectionSocket = welcomeSocket.accept();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		System.out.println("Accept Step 3");
+		
+		DataInputStream inFromClient = null;
+		try {
+			inFromClient = new DataInputStream(connectionSocket.getInputStream());
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		DataOutputStream outToClient = null;
+		try {
+			outToClient = new DataOutputStream(connectionSocket.getOutputStream());
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+		
+		SecureRandom random = new SecureRandom();
+		byte[] challenge= new byte[SIZE_OF_CHALLENGE];
+		random.nextBytes(challenge);
+
+	    System.out.println("Challenge: " + javax.xml.bind.DatatypeConverter.printHexBinary(challenge));
+		Cipher aesenc;
+		byte[] encryptedChallenge = null;
+		try {
+			aesenc = Cipher.getInstance("AES/CBC/PKCS5PADDING");
+	        IvParameterSpec iv = new IvParameterSpec("0000111122223333".getBytes("UTF-8"));
+			aesenc.init(Cipher.ENCRYPT_MODE, symKey, iv);
+			encryptedChallenge = aesenc.doFinal(challenge);
+		} catch (NoSuchAlgorithmException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (NoSuchPaddingException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (UnsupportedEncodingException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (InvalidKeyException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (InvalidAlgorithmParameterException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IllegalBlockSizeException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (BadPaddingException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+		
+		try {
+			outToClient.write(encryptedChallenge);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+	}
 			
 			
 //		      byte[] key = null;
@@ -260,7 +346,6 @@ public class ServiceProvider extends Thread{
 //		            if (!(subject.equals(SPName))){
 		            	//here we have to abort
 		            	
-		            }
 		           //we create the challenge + 1 
 		            // i'm doing weird things here.. what if the original challenge + 1 is no longer 20 bytes? etc
 		            

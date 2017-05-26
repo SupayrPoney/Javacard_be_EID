@@ -38,6 +38,7 @@ public class Client {
 	private static final byte AUTHENTICATE_SP = 0x34;
 	private static final byte AUTHENTICATE_SP_STEP = 0x36;
 	private static final byte END_AUTH = 0x38;
+	private static final byte AUTHENTICATE_CARD = 0x40;
 
 	private static final short ISSUER_LEN = 16; 
 	private static final short SUBJECT_LEN = 16;
@@ -48,11 +49,12 @@ public class Client {
 
 	private static final short SIGN_LEN = 64; 
 
-
+	private static final short SIZE_OF_AES = 16;
 
 
 	private final static short SW_VERIFICATION_FAILED = 0x6300;
 	private final static short SW_PIN_VERIFICATION_REQUIRED = 0x6301;
+	private final static short SW_WRONG_CHALLENGE = 0x6306;
 
 	private final static short SIZE_OF_INT_IN_BYTES = 4;
 
@@ -123,27 +125,48 @@ public class Client {
 				dIn.readFully(message); // read the message
 			}
 			byte[] dataToSendToSP = verify_certificate(message, a, r, c);
-			outToServer.write(dataToSendToSP);
+			if (dataToSendToSP.length != 0) {
+				outToServer.write(dataToSendToSP);
 
-			length[0] = (byte) dIn.read();
-			length[1] = (byte) dIn.read();
-			length[2] = (byte) dIn.read();
-			length[3] = (byte) dIn.read();
-			//from four bytes to an int
-			int msgLen = length[0] << 24 | (length[1] & 0xFF) << 16 | (length[2] & 0xFF) << 8 | (length[3] & 0xFF);
-			System.out.println(msgLen);
-			int newMsgLen = msgLen -1;
-			command = (int) dIn.read();
-			System.out.println("BEFORE");
-			if((msgLen - 1)>0) {
-				message = new byte[msgLen - 5];
-				dIn.readFully(message); // read the message
+				length[0] = (byte) dIn.read();
+				length[1] = (byte) dIn.read();
+				length[2] = (byte) dIn.read();
+				length[3] = (byte) dIn.read();
+				//from four bytes to an int
+				int msgLen = length[0] << 24 | (length[1] & 0xFF) << 16 | (length[2] & 0xFF) << 8 | (length[3] & 0xFF);
+				System.out.println(msgLen);
+				int newMsgLen = msgLen -1;
+				command = (int) dIn.read();
+				System.out.println("BEFORE");
+				if((msgLen - 1)>0) {
+					message = new byte[msgLen - 5];
+					dIn.readFully(message); // read the message
+				}
+				System.out.println("RECEIVED");
+				byte[] dataToSend = new byte[newMsgLen];
+				System.arraycopy(ByteBuffer.allocate(4).putInt(newMsgLen).array(), 0, dataToSend, 0, 4);
+				System.arraycopy(message, 0, dataToSend, 4, message.length);
+				r = end_of_auth(dataToSend, a, r, c);
+				clientSocketSP.close();
+
 			}
-			System.out.println("RECEIVED");
-			byte[] dataToSend = new byte[newMsgLen];
-			System.arraycopy(ByteBuffer.allocate(4).putInt(newMsgLen).array(), 0, dataToSend, 0, 4);
-			System.arraycopy(message, 0, dataToSend, 4, message.length);
-			end_of_auth(dataToSend, a, r, c);
+		}
+		if (r.getSW() == 0x9000) {
+			//Step 3
+			Socket clientSocketSP = new Socket("localhost", 9999);
+			DataOutputStream outToServer = new DataOutputStream(clientSocketSP.getOutputStream());
+			DataInputStream dIn = new DataInputStream(clientSocketSP.getInputStream());
+			System.out.println("WORKED");
+			byte[] encryptedChallenge = new byte[SIZE_OF_AES];
+			dIn.readFully(encryptedChallenge);
+
+			a = new CommandAPDU(IDENTITY_CARD_CLA, AUTHENTICATE_CARD, 0x00, 0x00, encryptedChallenge);
+			r = c.transmit(a);
+			if (r.getSW() != 0x9000) {
+				return;
+			}
+			//TODO
+
 		}
 
 
@@ -154,7 +177,7 @@ public class Client {
 		// authenticateCard
 		// releaseAttributes
 	}
-	private static void end_of_auth(byte[] message, CommandAPDU a, ResponseAPDU r, IConnection c) {
+	private static ResponseAPDU end_of_auth(byte[] message, CommandAPDU a, ResponseAPDU r, IConnection c) {
 
 		//Divide in chunks of 250 bytes
 		a = new CommandAPDU(IDENTITY_CARD_CLA, END_AUTH, 0x00, 0x00, message);
@@ -162,12 +185,11 @@ public class Client {
 		try {
 			r = c.transmit(a);
 		} catch (Exception e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		System.out.println("AFTER END AUTH");
-		System.out.println(r);
-		
+		return r;
+
 	}
 	private static int bytesToInt(byte[] bytes, int offset){
 		return bytes[offset] << 24 | (bytes[offset+1] & 0xFF) << 16 | (bytes[offset+2] & 0xFF) << 8 | (bytes[offset+3] & 0xFF);
@@ -201,9 +223,14 @@ public class Client {
 		}
 		a = new CommandAPDU(IDENTITY_CARD_CLA, AUTHENTICATE_SP, 0x00, 0x00, new byte[1]);
 		r = c.transmit(a);
-		System.out.println(r);
-		byte[] response = Arrays.copyOfRange(r.getData(),(short) 7, r.getData().length);
-		return response;
+		if(r.getSW() == 0x9000){
+			System.out.println(r);
+			byte[] response = Arrays.copyOfRange(r.getData(),(short) 7, r.getData().length);
+			return response;
+		}
+		else{
+			return new byte[0];
+		}
 	}
 
 	private static boolean validate_Time(CommandAPDU a, ResponseAPDU r, IConnection c) throws Exception {
