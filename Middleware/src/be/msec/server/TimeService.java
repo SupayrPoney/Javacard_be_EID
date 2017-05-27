@@ -68,7 +68,7 @@ public class TimeService {
 
 					byte[] hashedTime = md.digest(timeBytes);
 
-					Signature signEngine = Signature.getInstance("SHA256withRSA");
+					Signature signEngine = Signature.getInstance("SHA1withRSA");
 					signEngine.initSign(timestampPrivateKey);
 					signEngine.update(hashedTime);
 //					System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(timeBytes));

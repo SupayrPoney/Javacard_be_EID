@@ -67,7 +67,7 @@ public class Test {
 		keyStore.load(fis, "ThisIs4V3ryS4f3Pa$$w0rd".toCharArray());
 		fis.close();
 
-		String subject = "egov2";
+		String subject = "javacard";
 		
 		Certificate selfSignedCert = keyStore.getCertificate(subject);
 		RSAPublicKey pubKey = (RSAPublicKey) selfSignedCert.getPublicKey();
@@ -103,7 +103,9 @@ public class Test {
 		HomeMadeCertificate cert = new HomeMadeCertificate(subjectBytes, subjectBytes, exponent, modulus, sign, validFromBytes, validUntilBytes);
 
 		signCertificate(cert);
-		cert.save();
+		
+		
+		//cert.save();
 		
 //		
 //		HomeMadeCertificate deserCert = restoreCert(subject);
@@ -111,6 +113,14 @@ public class Test {
 //		System.out.println(Arrays.equals(deserCert.getSignature(),data));
 
 	      
+	}
+	public static void byteArrayToPrintable(byte[] input){
+		System.out.print("{");
+		for (byte b : input) {
+			System.out.print(b + ",");
+		}
+
+		System.out.println("}");
 	}
 
 	private static void signCertificate(HomeMadeCertificate cert) {
@@ -124,12 +134,13 @@ public class Test {
 			fis.close();
 			
 			PrivateKey caPrivKey = (PrivateKey) keyStore.getKey(name, "test".toCharArray());
-			Signature signEngine = Signature.getInstance("SHA256withRSA");
+			Signature signEngine = Signature.getInstance("SHA1withRSA");
 			signEngine.initSign(caPrivKey);
 			signEngine.update(cert.getAsBytesWithoutSign());
 			byte[] signature = signEngine.sign();
-			System.out.println(signature.length);
 			cert.setSignature(signature);
+			System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(signature));
+			//byteArrayToPrintable(cert.getAsBytesWithSign());
 		} catch (Exception e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
