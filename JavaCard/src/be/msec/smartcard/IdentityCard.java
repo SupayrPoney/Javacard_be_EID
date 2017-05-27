@@ -57,13 +57,13 @@ public class IdentityCard extends Applet {
 	
 	private final short SHORTZERO = 0;
 	
-	private final int ISSUER = 0;
-	private final int SUBJECT = 1;
-	private final int PUBLIC_KEY_MODULUS = 2;
-	private final int PUBLIC_KEY_EXPONENT = 3;
-	private final int START_DATE = 4;
-	private final int END_DATE = 5;
-	private final int SIGNATURE = 6;
+	private final short ISSUER = 0;
+	private final short SUBJECT = 1;
+	private final short PUBLIC_KEY_MODULUS = 2;
+	private final short PUBLIC_KEY_EXPONENT = 3;
+	private final short START_DATE = 4;
+	private final short END_DATE = 5;
+	private final short SIGNATURE = 6;
 	
 	private static final byte VALIDATE_PIN_INS = 0x22;
 	private static final byte GET_SERIAL_INS = 0x24;
@@ -91,6 +91,7 @@ public class IdentityCard extends Applet {
 	private static final short SIZE_OF_AES = 16;
 	private static final short SIZE_OF_PADDED_CHALLENGE = 16;
 	private static final short SIZE_OF_AUTH = 4;
+	private static final short SIZE_OF_UNIQUE_KEY = 4;
 	private static final short SIZE_OF_CERT = ISSUER_LEN + SUBJECT_LEN + 2*DATE_LEN + EXPONENT_LEN + MODULUS_LEN + SIGN_LEN;
 	
 	
@@ -104,12 +105,16 @@ public class IdentityCard extends Applet {
 	private final static short SW_TIME_SIGNATURE_VERIFICATION_FAILED = 0x6304;
 	private final static short SW_CERT_VERIFICATIONR_OR_VALIDATION_FAILED = 0x6305;
 	private final static short SW_WRONG_CHALLENGE = 0x6306;
+	private final static short SW_WRONG_REQUEST = 0x6307;
 
 	private AESKey symKey = null;
+	private byte[] userUniqueKey = new byte[SIZE_OF_UNIQUE_KEY];
 	private byte[] emptyResponse = new byte[0];
 	private byte[] pinBuffer = new byte[PIN_SIZE];
+	private byte[] issuerBuffer = new byte[ISSUER_LEN];
+	private byte[] dataFornym = new byte[SIZE_OF_UNIQUE_KEY + SUBJECT_LEN];
+	private byte[] subjectBuffer = new byte[SUBJECT_LEN];
 	private byte[] hashedArray = new byte[32];
-	private byte[] password = new byte[16];
 	private byte[] authenticatedSPCertificate = new byte[SIZE_OF_CERT];
 	private byte[] signatureBytes = new byte[SIGN_LEN];
 	private byte[] aesEncryptBytes = new byte[SIZE_OF_AES];
@@ -128,7 +133,6 @@ public class IdentityCard extends Applet {
 	//will need to be changed to the new kind of certificate
 	private byte[] javacardCert = {106,97,118,97,99,97,114,100,0,0,0,0,0,0,0,0,106,97,118,97,99,97,114,100,0,0,0,0,0,0,0,0,-119,-11,15,121,24,-88,70,-8,104,-83,31,12,-96,-128,-120,-117,-73,-100,126,-95,-69,-23,-126,6,-98,86,-32,-9,101,56,-5,47,-96,-49,1,-80,25,-127,80,5,-76,-4,-19,-3,107,99,-90,-57,79,64,-95,-110,-76,-60,77,91,-62,30,-121,-109,115,-32,-64,99,1,0,1,0,0,7,-31,1,25,9,44,0,0,7,-30,1,25,9,44,127,-26,78,23,107,7,-38,71,-43,-8,-49,-59,-89,-92,59,-34,-13,-12,54,-70,81,60,-108,51,1,-31,-52,-76,119,-120,-43,114,-51,89,90,61,-68,-78,-87,-90,-103,80,-98,80,95,103,21,71,-16,18,10,30,-87,50,2,83,-42,-65,-60,-105,75,-21,11,-45};
 
-	
 	private byte[] mainCAPublicExponent = {1,0,1};
 	private byte[] mainCAPublicModulus = {-111,103,-6,88,-39,13,27,-42,85,-123,-123,-92,101,-57,-34,83,42,-118,-101,115,38,22,-113,-108,-21,97,-21,99,-18,-77,54,58,32,115,-47,-80,-71,53,43,-3,81,88,114,-25,-114,125,-12,-53,108,25,-49,37,15,66,20,8,52,-99,-49,-79,23,81,50,23};
 
@@ -136,7 +140,12 @@ public class IdentityCard extends Applet {
 	
 	private byte[] govTimePublicExponent = {1,0,1};
 	private byte[] govTimePublicModulus = {-122,-6,-74,-13,93,84,85,-61,-39,4,-102,-7,82,43,-67,-2,-63,-65,-69,100,51,-106,4,94,63,7,-67,61,127,-16,-59,-95,34,-49,14,14,94,44,81,-36,94,26,-45,46,-100,-40,-30,-55,-69,40,124,-3,0,-2,-84,-97,0,-87,77,44,-29,-20,-80,49};
-	//CHECK HERE IF IT'S CORRECT
+	
+	private byte[] EGOV_BYTES =    {101,103,111,118,0,0,0,0,0,0,0,0,0,0,0,0};
+	private byte[] HEALTH_BYTES =  {104,101,97,108,116,104,0,0,0,0,0,0,0,0,0,0};
+	private byte[] SOCNET_BYTES =  {115,111,99,110,101,116,0,0,0,0,0,0,0,0,0,0};
+	private byte[] DEFAULT_BYTES = {100,101,102,97,117,108,116,0,0,0,0,0,0,0,0,0};
+	
 	
 	private String[] lastValidationTime = {"2014","05","01","15","06"};
 	
@@ -161,21 +170,24 @@ public class IdentityCard extends Applet {
 	private byte age;
 	private byte gender;
 	byte[] picture = new byte[]{0x30, 0x35, 0x37, 0x36, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04};
+// max size byte array to release attributes
+	private byte[] responseToAttributesReleasing = new byte[32 + 32 + 48 + 2 + 6 + 1 + 1 + 1 + 16];
 	
-	private byte NYM_INDEX = 0;
-	private byte NAME_INDEX = 1;
-	private byte ADDRESS_INDEX = 2;
-	private byte COUNTRY_INDEX = 3;
-	private byte BIRTHDATE_INDEX = 4;
-	private byte DONOR_INDEX = 5;
-	private byte AGE_INDEX = 6;
-	private byte GENDER_INDEX = 7;
-	private byte PICTURE_INDEX = 8;
+	private final byte NYM_INDEX = 0;
+	private final byte NAME_INDEX = 1;
+	private final byte ADDRESS_INDEX = 2;
+	private final byte COUNTRY_INDEX = 3;
+	private final byte BIRTHDATE_INDEX = 4;
+	private final byte DONOR_INDEX = 5;
+	private final byte AGE_INDEX = 6;
+	private final byte GENDER_INDEX = 7;
+	private final byte PICTURE_INDEX = 8;
+	
 
 	private byte[] canEgovAccess = {NYM_INDEX, NAME_INDEX, ADDRESS_INDEX, COUNTRY_INDEX, BIRTHDATE_INDEX, AGE_INDEX, GENDER_INDEX};
 	private byte[] canSocNetAccess = {NYM_INDEX, NAME_INDEX, COUNTRY_INDEX, AGE_INDEX, GENDER_INDEX, PICTURE_INDEX};
 	private byte[] canDefaultAccess = {NYM_INDEX, AGE_INDEX};
-	private byte[] canDonorAccess = {NYM_INDEX, NAME_INDEX, DONOR_INDEX, AGE_INDEX, GENDER_INDEX, PICTURE_INDEX};
+	private byte[] canHealthAccess = {NYM_INDEX, NAME_INDEX, DONOR_INDEX, AGE_INDEX, GENDER_INDEX, PICTURE_INDEX};
 	
 	private byte[] currentQuery = new byte[9];
 	
@@ -187,21 +199,35 @@ public class IdentityCard extends Applet {
 		 */
 		pin = new OwnerPIN(PIN_TRY_LIMIT,PIN_SIZE);
 		pin.update(new byte[]{0x01,0x02,0x03,0x04},(short) 0, PIN_SIZE);
-		name = "Jean Dupont".getBytes();
-		address = "23 Roadlane Texas".getBytes();
-		country = "BE".getBytes();
+		byte[] unpaddedName = {74,101,97,110,32,68,117,112,111,110,116}; // Jean Dupont
+		Util.arrayCopy(unpaddedName, SHORTZERO, name, SHORTZERO, (short) Math.min(name.length, unpaddedName.length));
+		byte[] unpaddedAddress = {50,51,32,82,111,97,100,108,97,110,101,32,84,101,120,97,115};//"23 Roadlane Texas"
+		Util.arrayCopy(unpaddedAddress, SHORTZERO, address, SHORTZERO, (short) Math.min(address.length, unpaddedAddress.length));
+		
+		byte[] unpaddedCountry = {66,69};
+		Util.arrayCopy(unpaddedCountry, SHORTZERO, country, SHORTZERO, (short) Math.min(country.length, unpaddedCountry.length));
 
+		
+		 javacard.security.RandomData randomizer = RandomData.getInstance(RandomData.ALG_PSEUDO_RANDOM);
+		try {
+			//only pseudo_random available on the card
+			randomizer.generateData(userUniqueKey, (short) 0, (short) userUniqueKey.length);
+		}
+		catch( Exception e){
+			
+		}
 		byte[] yearBytes = ByteBuffer.allocate(4).putInt(1965).array();
 		byte[] timeBytes = new byte[6];
 		System.arraycopy(yearBytes, 0, timeBytes, 0, 4);
 		timeBytes[4] = 4;
 		timeBytes[5] = 23;
+		Util.arrayCopy(timeBytes, SHORTZERO, birthDate, SHORTZERO, (short)birthDate.length);
 		
 		// 0 is Male, 1 is female. Other numbers can also be used for other genders.
-		gender = 0;
+		gender = 1;
 		// 0 is no donor, 1 is full donor. Other numbers (till 255) for special kinds of donor
 		donor = 1;
-		
+		age = 53;
 
 		//TODO PICTURE
 		
@@ -661,7 +687,7 @@ public class IdentityCard extends Applet {
 	
 
 	private void release_attributes(APDU apdu) {
-		
+	//step 4.2
 		byte[] buffer = apdu.getBuffer();
 		byte queryLen = buffer[ISO7816.OFFSET_CDATA];
 		System.out.println(queryLen);
@@ -669,16 +695,134 @@ public class IdentityCard extends Applet {
 		Util.arrayFillNonAtomic(bigStorage, SHORTZERO,(short) bigStorage.length, (byte) 0);
 		Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA+1), bigStorage, SHORTZERO,(short) queryLen);
 		Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA+1 + queryLen), pinBuffer, SHORTZERO, PIN_SIZE);
-		
-		if (pin.check(pinBuffer, ISO7816.OFFSET_CDATA,PIN_SIZE)==false)
+	// step 4.3
+		if (pin.check(pinBuffer, SHORTZERO,PIN_SIZE)==false){
+			System.out.println("INVALID PIN");
 			ISOException.throwIt(SW_VERIFICATION_FAILED);
-		else if (auth == (byte)0x00)
-			ISOException.throwIt(SW_SP_NOT_AUTH);
-		
-		else{
-			
 		}
-		//TODO
+	// step 4.4
+		else if (auth == (byte)0x00){
+			System.out.println("NOT AUTH");
+			ISOException.throwIt(SW_SP_NOT_AUTH);
+		}
+	// step 4.5
+		else{
+			System.out.println("4.5");
+			System.out.println(authenticatedSPCertificate.length);
+			System.out.println(issuerBuffer.length);
+			System.out.println(subjectBuffer.length);
+			Util.arrayCopy(authenticatedSPCertificate, SHORTZERO, issuerBuffer, SHORTZERO, ISSUER_LEN);
+			Util.arrayCopy(authenticatedSPCertificate, ISSUER_LEN, subjectBuffer, SHORTZERO, SUBJECT_LEN);
+			
+			byte[] accessibleFields = null;
+			if (Util.arrayCompare(issuerBuffer, SHORTZERO, EGOV_BYTES, SHORTZERO, (short) EGOV_BYTES.length) == 0) {
+				accessibleFields = canEgovAccess;
+			} 
+			else if(Util.arrayCompare(issuerBuffer, SHORTZERO, SOCNET_BYTES, SHORTZERO, (short) SOCNET_BYTES.length) == 0){
+				accessibleFields = canSocNetAccess;
+
+			}
+			else if(Util.arrayCompare(issuerBuffer, SHORTZERO, HEALTH_BYTES, SHORTZERO, (short) HEALTH_BYTES.length) == 0){
+				accessibleFields = canHealthAccess;
+
+			}
+			else if(Util.arrayCompare(issuerBuffer, SHORTZERO, DEFAULT_BYTES, SHORTZERO, (short) DEFAULT_BYTES.length) == 0){
+				accessibleFields = canDefaultAccess;
+			}
+			
+		// step 4.6
+			System.out.println("4.6");
+			byte requestAccepted = 0x01;
+			for (int i = 0; i < queryLen; i++) {
+				byte requestedData = bigStorage[i];
+				byte isRequestedDataAvailable = 0x00;
+				for (byte b : accessibleFields) {
+					if (b == requestedData) {
+						isRequestedDataAvailable = 0x01;
+					}
+				}
+				if (isRequestedDataAvailable == 0x00) {
+					requestAccepted = 0x00;
+					ISOException.throwIt(SW_WRONG_REQUEST);
+				}
+			}
+			if (requestAccepted == 0x01) {
+		// step 4.7
+				System.out.println("4.7");
+				Util.arrayCopy(userUniqueKey, SHORTZERO, dataFornym, SHORTZERO, SIZE_OF_UNIQUE_KEY);
+				Util.arrayCopy(subjectBuffer, SHORTZERO, dataFornym, SIZE_OF_UNIQUE_KEY, SUBJECT_LEN);
+
+				javacard.security.MessageDigest md = javacard.security.MessageDigest.getInstance(javacard.security.MessageDigest.ALG_SHA_256, false);
+				md.reset();
+				System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(subjectBuffer));
+								
+				System.out.println("BEFORE HASHING: " + javax.xml.bind.DatatypeConverter.printHexBinary(dataFornym));
+				
+				md.doFinal(dataFornym, (short) 0,(short)dataFornym.length, nym, (short) 0);
+				
+			}
+		// step 4.8
+			//responseToAttributesReleasing
+			short offset = 0;
+			for (int i = 0; i < queryLen; i++) {
+				byte requestedData = bigStorage[i];
+				switch (requestedData) {
+			// step 4.9
+				case NYM_INDEX:
+					Util.arrayCopy(nym, SHORTZERO, responseToAttributesReleasing, offset, (short) nym.length);
+					offset += nym.length;
+					break;
+				case NAME_INDEX:
+					Util.arrayCopy(name, SHORTZERO, responseToAttributesReleasing, offset, (short) name.length);
+					offset += name.length;
+					
+					break;
+				case ADDRESS_INDEX:
+					Util.arrayCopy(address, SHORTZERO, responseToAttributesReleasing, offset, (short) address.length);
+					offset += address.length;
+					
+					break;
+				case COUNTRY_INDEX:
+					Util.arrayCopy(country, SHORTZERO, responseToAttributesReleasing, offset, (short) country.length);
+					offset += country.length;
+					
+					break;
+				case BIRTHDATE_INDEX:
+					Util.arrayCopy(birthDate, SHORTZERO, responseToAttributesReleasing, offset, (short) birthDate.length);
+					offset += birthDate.length;
+					
+					break;
+				case DONOR_INDEX:
+					responseToAttributesReleasing[offset] = donor;
+					offset += 1;
+					break;
+				case AGE_INDEX:
+					responseToAttributesReleasing[offset] = age;
+					offset += 1;
+					
+					break;
+				case GENDER_INDEX:
+					responseToAttributesReleasing[offset] = gender;
+					offset += 1;
+					
+					break;
+				case PICTURE_INDEX:
+					Util.arrayCopy(picture, SHORTZERO, responseToAttributesReleasing, offset, (short) picture.length);
+					offset += picture.length;
+					
+					break;
+
+				default:
+					System.out.println("ARGUMENT NON AVAILABLE");
+					break;
+				}
+				
+			}
+			System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(responseToAttributesReleasing));
+			
+			//TODO
+		}
+		
 		
 		
 	}
@@ -704,7 +848,6 @@ public class IdentityCard extends Applet {
 			    
 			    cipher.doFinal(aesEncryptBytes, (short) 0, (short) aesEncryptBytes.length, paddedChallenge, (short) 0);
 
-			    System.out.println("Challenge: " + javax.xml.bind.DatatypeConverter.printHexBinary(paddedChallenge));
 		// step 3.6
 			    Util.arrayCopy(paddedChallenge, SHORTZERO, challenge, SHORTZERO, (short) challenge.length); 
 		        javacard.security.Signature signEngine = javacard.security.Signature.getInstance(javacard.security.Signature.ALG_RSA_SHA_PKCS1, false);
@@ -722,10 +865,8 @@ public class IdentityCard extends Applet {
 				Util.arrayCopy(challenge, (short) 0, concatChallengeAuth, (short) 0, SIZE_OF_CHALLENGE);
 				Util.arrayCopy(authText, (short) 0, concatChallengeAuth, SIZE_OF_CHALLENGE, SIZE_OF_AUTH);
 				
-				System.out.println("BEFORE HASHING: " + javax.xml.bind.DatatypeConverter.printHexBinary(concatChallengeAuth));
 				
 				md.doFinal(concatChallengeAuth, (short) 0,(short)concatChallengeAuth.length, hashedArray, (short) 0);
-				System.out.println("AFTER HASHING: " + javax.xml.bind.DatatypeConverter.printHexBinary(hashedArray));
 				
 				signEngine.sign(hashedArray, (short) 0, (short)hashedArray.length, signatureBytes, (short)0);
 				
@@ -755,7 +896,6 @@ public class IdentityCard extends Applet {
 				symKey.getKey(keybytes, SHORTZERO);
 				
 	  // step 3.8
-				System.out.println("CERTIFICATE:\n" + javax.xml.bind.DatatypeConverter.printHexBinary(javacardCert));
 
 				apdu.setOutgoing();
 				apdu.setOutgoingLength((short)encryptedCertificateAndSignature.length);
@@ -766,9 +906,7 @@ public class IdentityCard extends Applet {
 	}
 
 	private void end_auth(APDU apdu) {
-		System.out.println("AUTH");
 		byte[] buffer = apdu.getBuffer();
-		System.out.println("AUTH1");
 		Util.arrayCopy(buffer, (short)ISO7816.OFFSET_CDATA, fourBytes, (short)0, (short)4);
 		short size = (short) bytesToInt(fourBytes, 0);
 		System.out.println(size);
@@ -776,7 +914,6 @@ public class IdentityCard extends Applet {
 		Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA + 4), encryptedResponse,(short) 0, size);
 
         byte[] ivBytes = null;
-		System.out.println("AUTH2");
 		try {
 			ivBytes = "0000111122223333".getBytes("UTF-8");
 		} catch (UnsupportedEncodingException e) {

@@ -417,8 +417,6 @@ public class ServiceProvider {
 		
 		System.arraycopy(certificate, (SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN + EXPONENT_LEN + DATE_LEN + DATE_LEN), certificateSignature, 0, SIGN_LEN);
 		
-		
-		
 		System.out.println("CERTIFICATE:\n" + javax.xml.bind.DatatypeConverter.printHexBinary(certificate));
 		System.out.println("SIGNATURE:\n" + javax.xml.bind.DatatypeConverter.printHexBinary(certificateSignature));
 		
