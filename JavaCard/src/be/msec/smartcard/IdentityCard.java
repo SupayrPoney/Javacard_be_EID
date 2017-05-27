@@ -57,8 +57,8 @@ public class IdentityCard extends Applet {
 	
 	private final short SHORTZERO = 0;
 	
-	private final int SUBJECT = 0;
-	private final int ISSUER = 1;
+	private final int ISSUER = 0;
+	private final int SUBJECT = 1;
 	private final int PUBLIC_KEY_MODULUS = 2;
 	private final int PUBLIC_KEY_EXPONENT = 3;
 	private final int START_DATE = 4;
@@ -75,6 +75,7 @@ public class IdentityCard extends Applet {
 	private static final byte AUTHENTICATE_SP_STEP = 0x36;
 	private static final byte END_AUTH = 0x38;
 	private static final byte AUTHENTICATE_CARD = 0x40;
+	private static final byte QUERY_ATTRIBUTES = 0x42;
 	
 	private static final short ISSUER_LEN = 16; 
 	private static final short SUBJECT_LEN = 16;
@@ -84,7 +85,7 @@ public class IdentityCard extends Applet {
 
 	private static final short SIGN_LEN = 64; 
 	
-	private static boolean auth = false;
+	private static byte auth = (byte) 0x00;
 
 	private static final short SIZE_OF_CHALLENGE = 2;
 	private static final short SIZE_OF_AES = 16;
@@ -106,7 +107,10 @@ public class IdentityCard extends Applet {
 
 	private AESKey symKey = null;
 	private byte[] emptyResponse = new byte[0];
+	private byte[] pinBuffer = new byte[PIN_SIZE];
 	private byte[] hashedArray = new byte[32];
+	private byte[] password = new byte[16];
+	private byte[] authenticatedSPCertificate = new byte[SIZE_OF_CERT];
 	private byte[] signatureBytes = new byte[SIGN_LEN];
 	private byte[] aesEncryptBytes = new byte[SIZE_OF_AES];
 	private byte[] symKeyBytes = new byte[SIZE_OF_AES];
@@ -148,6 +152,7 @@ public class IdentityCard extends Applet {
 	private short authStep = 0;
 	
 	//TODO nymu,SP - hash(UserID ++ hash(cerificate_SP))
+	private byte[] nym = new byte[32];
 	private byte[] name = new byte[32];
 	private byte[] address = new byte[48];
 	private byte[] country = new byte[2];
@@ -157,10 +162,22 @@ public class IdentityCard extends Applet {
 	private byte gender;
 	byte[] picture = new byte[]{0x30, 0x35, 0x37, 0x36, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04};
 	
-	private byte NAME_INDEX = 0;
-	private byte ADDRESS_INDEX = 1;
+	private byte NYM_INDEX = 0;
+	private byte NAME_INDEX = 1;
+	private byte ADDRESS_INDEX = 2;
+	private byte COUNTRY_INDEX = 3;
+	private byte BIRTHDATE_INDEX = 4;
+	private byte DONOR_INDEX = 5;
+	private byte AGE_INDEX = 6;
+	private byte GENDER_INDEX = 7;
+	private byte PICTURE_INDEX = 8;
+
+	private byte[] canEgovAccess = {NYM_INDEX, NAME_INDEX, ADDRESS_INDEX, COUNTRY_INDEX, BIRTHDATE_INDEX, AGE_INDEX, GENDER_INDEX};
+	private byte[] canSocNetAccess = {NYM_INDEX, NAME_INDEX, COUNTRY_INDEX, AGE_INDEX, GENDER_INDEX, PICTURE_INDEX};
+	private byte[] canDefaultAccess = {NYM_INDEX, AGE_INDEX};
+	private byte[] canDonorAccess = {NYM_INDEX, NAME_INDEX, DONOR_INDEX, AGE_INDEX, GENDER_INDEX, PICTURE_INDEX};
 	
-	private byte[] canEgovAccess = {NAME_INDEX,};
+	private byte[] currentQuery = new byte[9];
 	
 	
 	private IdentityCard() {
@@ -333,7 +350,6 @@ public class IdentityCard extends Applet {
 			apdu.setOutgoingLength((short)1);
 			apdu.sendBytesLong(new byte[]{(byte)response},(short)0,(short)1);
 		} catch (ParseException e) {
-			// TODO Auto-generated catch block
 		}
 
 
@@ -370,7 +386,10 @@ public class IdentityCard extends Applet {
 		return ByteBuffer.allocate(4).putInt(integer).array();
 	}
 	
+	
 	private void authenticate_sp(APDU apdu){
+		System.out.println("AUTH_SP");
+		
 		authStep = 0;
 		byte[] buffer = apdu.getBuffer();
 		short bytesLeft = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
@@ -386,7 +405,6 @@ public class IdentityCard extends Applet {
 		}
 		
 		byte[] response = null;
-		System.out.println("AUTH_SP");
 		byte[] issuer = new byte[ISSUER_LEN];
 		byte[] subject = new byte[SUBJECT_LEN];
 		byte[] modulus = new byte[MODULUS_LEN+1];
@@ -396,8 +414,13 @@ public class IdentityCard extends Applet {
 		byte[] validUntil = new byte[DATE_LEN];
 		byte[] signature = new byte[SIGN_LEN];
 
+		//Store for later
+		Util.arrayCopy(bigStorage, SHORTZERO, authenticatedSPCertificate, SHORTZERO, (short) authenticatedSPCertificate.length);
+		
 		Util.arrayCopy(bigStorage, (short) 0x00, issuer,(short) 0x00, ISSUER_LEN);
 		Util.arrayCopy(bigStorage, (short) ISSUER_LEN, subject,(short) 0x00, SUBJECT_LEN);
+		System.out.println(new String(issuer));
+		System.out.println(new String(subject));
 		Util.arrayCopy(bigStorage, (short) (SUBJECT_LEN + ISSUER_LEN), modulus,(short) 0x01, MODULUS_LEN);
 		Util.arrayCopy(bigStorage, (short) (SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN), exponent,(short) 0x00, EXPONENT_LEN);
 		Util.arrayCopy(bigStorage, (short) (SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN + EXPONENT_LEN), validFrom,(short) 0x00, DATE_LEN);
@@ -492,7 +515,6 @@ public class IdentityCard extends Applet {
 	// step 2.7
 			byte[] ivBytes = "0000111122223333".getBytes("UTF-8");
 		    javacardx.crypto.Cipher cipher = javacardx.crypto.Cipher.getInstance(javacardx.crypto.Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
-		    //TODO
 		    System.out.println(symKey.getSize());
 		    cipher.init(symKey, javacardx.crypto.Cipher.MODE_ENCRYPT, ivBytes, (short)0, (short)ivBytes.length);
 		    
@@ -625,6 +647,9 @@ public class IdentityCard extends Applet {
 		case AUTHENTICATE_CARD:
 			auth_card(apdu);
 			break;
+		case QUERY_ATTRIBUTES:
+			release_attributes(apdu);
+			break;
 			
 		//If no matching instructions are found it is indicated in the status word of the response.
 		//This can be done by using this method. As an argument a short is given that indicates
@@ -635,12 +660,35 @@ public class IdentityCard extends Applet {
 
 	
 
+	private void release_attributes(APDU apdu) {
+		
+		byte[] buffer = apdu.getBuffer();
+		byte queryLen = buffer[ISO7816.OFFSET_CDATA];
+		System.out.println(queryLen);
+		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(buffer));
+		Util.arrayFillNonAtomic(bigStorage, SHORTZERO,(short) bigStorage.length, (byte) 0);
+		Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA+1), bigStorage, SHORTZERO,(short) queryLen);
+		Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA+1 + queryLen), pinBuffer, SHORTZERO, PIN_SIZE);
+		
+		if (pin.check(pinBuffer, ISO7816.OFFSET_CDATA,PIN_SIZE)==false)
+			ISOException.throwIt(SW_VERIFICATION_FAILED);
+		else if (auth == (byte)0x00)
+			ISOException.throwIt(SW_SP_NOT_AUTH);
+		
+		else{
+			
+		}
+		//TODO
+		
+		
+	}
+
 	private void auth_card(APDU apdu) {
 		System.out.println("STEP 3\n");
 		byte[] buffer = apdu.getBuffer();
 		Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, aesEncryptBytes,(short) 0, SIZE_OF_AES);
 		// step 3.4
-			if (auth == false) {
+			if (auth == (byte)0x00) {
 				ISOException.throwIt(SW_SP_NOT_AUTH);
 			}
 			else{
@@ -687,7 +735,6 @@ public class IdentityCard extends Applet {
 				
 				
 			    javacardx.crypto.Cipher encryptCipher = javacardx.crypto.Cipher.getInstance(javacardx.crypto.Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
-			    //TODO
 			    encryptCipher.init(symKey, javacardx.crypto.Cipher.MODE_ENCRYPT, ivBytes, (short)0, (short)ivBytes.length);
 			    
 
@@ -761,7 +808,7 @@ public class IdentityCard extends Applet {
 		if (responseShort != previousChallenge+1) {
 			ISOException.throwIt(SW_WRONG_CHALLENGE);
 		}
-		auth = true;
+		auth = (byte) 0x01;
 		apdu.setOutgoing();
 		apdu.setOutgoingLength((short)0);
 		apdu.sendBytesLong(emptyResponse,(short)0,(short)emptyResponse.length);

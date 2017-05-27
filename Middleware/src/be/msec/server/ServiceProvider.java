@@ -13,6 +13,7 @@ import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
@@ -40,12 +41,13 @@ import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+import javax.swing.SwingWorker;
 
 
 
 
 
-public class ServiceProvider extends Thread{
+public class ServiceProvider {
 	public final static byte REVALIDATION_REQUEST = 1;
 	private static final short SIZE_OF_CHALLENGE = 2;
 	private static final short ISSUER_LEN = 16; 
@@ -56,6 +58,17 @@ public class ServiceProvider extends Thread{
 	private static final short EXPONENT_LEN = 3; 
 	private static final short MODULUS_LEN = 64; 
 
+	private byte NYM_INDEX = 0;
+	private byte NAME_INDEX = 1;
+	private byte ADDRESS_INDEX = 2;
+	private byte COUNTRY_INDEX = 3;
+	private byte BIRTHDATE_INDEX = 4;
+	private byte DONOR_INDEX = 5;
+	private byte AGE_INDEX = 6;
+	private byte GENDER_INDEX = 7;
+	private byte PICTURE_INDEX = 8;
+	
+	
 	private byte[] authText = {65,117,116,104};
 
 	private byte[] mainCAPublicExponent = {1,0,1};
@@ -66,9 +79,10 @@ public class ServiceProvider extends Thread{
 	private static final short SIZE_OF_CERT = ISSUER_LEN + SUBJECT_LEN + 2*DATE_LEN + EXPONENT_LEN + MODULUS_LEN + SIGN_LEN;
 	
 	String SPName;
+	private ServerSocket clientComSocket;
+	private SecretKey symmetricKey;
 	
-	public ServiceProvider(String name) throws Exception {
-		SPName = name;
+	public ServiceProvider() {
 	}
 
 	private PrivateKey getPrivateKey() throws KeyStoreException, NoSuchAlgorithmException, CertificateException, IOException, UnrecoverableKeyException{
@@ -86,7 +100,8 @@ public class ServiceProvider extends Thread{
 
 	}
 	
-	public void run() {
+	public void start(String name) {
+		SPName = name;
 		ServerSocket welcomeSocket = null;
 		File file = new File("certs/" + SPName + ".crt");
 		FileInputStream fin = null;
@@ -216,7 +231,7 @@ public class ServiceProvider extends Thread{
 				String paddedSPName = new String(spNameBuffer);
 				if (!paddedSPName.equals(certSubject)) {
 					System.out.println("Test");
-					return;
+					return ;
 				}
 				
 			// Step 2.12
@@ -265,10 +280,13 @@ public class ServiceProvider extends Thread{
 				e.printStackTrace();
 			} catch (InvalidAlgorithmParameterException e) {
 				e.printStackTrace();
-			} 
+			}
+			return ; 
     }
 	
-	private void step3( ServerSocket welcomeSocket, SecretKey symKey){
+	private String step3( ServerSocket welcomeSocket, SecretKey symKey){
+		clientComSocket = welcomeSocket;
+		symmetricKey = symKey;
 		Socket connectionSocket = null;
 		try {
 			connectionSocket = welcomeSocket.accept();
@@ -354,6 +372,11 @@ public class ServiceProvider extends Thread{
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
+		}
+		try {
+			connectionSocket.close();
+		} catch (IOException e2) {
+			e2.printStackTrace();
 		}
 	// step 3.9
 		Cipher aesdecCipher = null;
@@ -458,8 +481,9 @@ public class ServiceProvider extends Thread{
 				javacardSignEngine.initVerify(javacardPubKey);
 				javacardSignEngine.update(hashedConcatChallengeAuth);
 				boolean javacardSignVerfies = javacardSignEngine.verify(signedHashedChallenge);
-				if (javacardSignVerfies) {
-					step4();
+				if (! javacardSignVerfies) {
+					return "";
+					//step4(welcomeSocket, symKey);
 				}
 				
 			} catch (NoSuchAlgorithmException e) {
@@ -473,6 +497,7 @@ public class ServiceProvider extends Thread{
 			}
 			
 		}
+		return "";
 		
 
 
@@ -480,8 +505,27 @@ public class ServiceProvider extends Thread{
 		
 	}
 
-	private void step4() {
-		// TODO Auto-generated method stub
+	public void step4(){
+
+		Socket clientSocketSP;
+		DataOutputStream outToClient = null;
+		try {
+			clientSocketSP = new Socket("localhost", 9988);
+			outToClient = new DataOutputStream(clientSocketSP.getOutputStream());
+			DataInputStream inFromClient = new DataInputStream(clientSocketSP.getInputStream());
+			byte[] query = {NYM_INDEX, NAME_INDEX, ADDRESS_INDEX, COUNTRY_INDEX, BIRTHDATE_INDEX, AGE_INDEX, GENDER_INDEX};
+			byte[] queryWithLen = new byte[1 + query.length];
+			queryWithLen[0] = (byte) query.length;
+			System.arraycopy(query, 0, queryWithLen, 1, query.length);
+			outToClient.write(queryWithLen);
+		} catch (UnknownHostException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
 		
 	}
 }

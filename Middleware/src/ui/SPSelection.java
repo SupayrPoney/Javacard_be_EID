@@ -128,16 +128,16 @@ public class SPSelection extends JFrame {
 		gbc_panel_1.gridy = 1;
 		contentPane.add(panel_1, gbc_panel_1);
 		panel_1.setLayout(new GridLayout(0, 1, 0, 0));
-		
+
+		final ServiceProvider SP = new ServiceProvider();
 		btnNewButton.addActionListener(new ActionListener() {
 			
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				try {
 					System.out.println((String) comboBox_1.getSelectedItem());
-					ServiceProvider SP = new ServiceProvider((String) comboBox_1.getSelectedItem());
 					btnNewButton.setEnabled(false);
-					SP.start();
+					SP.start((String) comboBox_1.getSelectedItem());
 				} catch (Exception e1) {
 					// TODO Auto-generated catch block
 					e1.printStackTrace();
@@ -146,6 +146,17 @@ public class SPSelection extends JFrame {
 			}
 		});
 		panel_1.add(btnNewButton);
+		
+		JButton btnQueryAttributes = new JButton("Query attributes");
+		panel_1.add(btnQueryAttributes);
+		btnQueryAttributes.addActionListener(new ActionListener() {
+			
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				SP.step4();
+				
+			}
+		});
 		
 	}
 }

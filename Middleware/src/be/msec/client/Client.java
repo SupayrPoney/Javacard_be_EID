@@ -9,9 +9,13 @@ import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
+import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.text.ParseException;
@@ -22,8 +26,14 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
+import java.util.Iterator;
 
 import javax.smartcardio.*;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPasswordField;
 
 
 public class Client {
@@ -39,6 +49,7 @@ public class Client {
 	private static final byte AUTHENTICATE_SP_STEP = 0x36;
 	private static final byte END_AUTH = 0x38;
 	private static final byte AUTHENTICATE_CARD = 0x40;
+	private static final byte QUERY_ATTRIBUTES = 0x42;
 
 	private static final short ISSUER_LEN = 16; 
 	private static final short SUBJECT_LEN = 16;
@@ -51,6 +62,7 @@ public class Client {
 	private static final short SIZE_OF_CERT = ISSUER_LEN + SUBJECT_LEN + 2*DATE_LEN + EXPONENT_LEN + MODULUS_LEN + SIGN_LEN;
 
 	private static final short SIZE_OF_AES = 16;
+	private static final short SIZE_OF_PIN = 4;
 
 
 	private final static short SW_VERIFICATION_FAILED = 0x6300;
@@ -58,11 +70,13 @@ public class Client {
 	private final static short SW_WRONG_CHALLENGE = 0x6306;
 
 	private final static short SIZE_OF_INT_IN_BYTES = 4;
+	private static IConnection connectionWithJavacard;
 
 
 
 	private static void authenticate(CommandAPDU a, ResponseAPDU r, IConnection c) throws Exception{
 		int response = 0;
+		System.out.println("AUTHENTICATE");
 		if (!validate_Time(a, r, c)){
 			System.out.println("NEED VALIDATION");
 			BufferedReader inFromUser = new BufferedReader(new InputStreamReader(System.in));
@@ -152,6 +166,7 @@ public class Client {
 
 			}
 		}
+		System.out.println("B - " + r);
 		if (r.getSW() == 0x9000) {
 			//Step 3
 			Socket clientSocketSP = new Socket("localhost", 9999);
@@ -176,7 +191,7 @@ public class Client {
 			System.arraycopy(paddingLen, 0, paddedResponseWithLength, 4, 4);
 			System.arraycopy(paddedResponse, 0, paddedResponseWithLength, 8, paddedResponse.length);
 			outToServer.write(paddedResponseWithLength);
-			
+			step4();
 		}
 
 
@@ -186,6 +201,77 @@ public class Client {
 
 		// authenticateCard
 		// releaseAttributes
+	}
+	private static void step4() {
+		System.out.println("STEP4");
+		ServerSocket welcomeSocket = null;
+				
+		try {
+			welcomeSocket = new ServerSocket(9988);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		Socket connectionSocket = null;
+		try {
+			connectionSocket = welcomeSocket.accept();
+		} catch( Exception e){
+			e.printStackTrace();
+		}
+
+		System.out.println("Client side accept");
+		DataInputStream inFromServer = null;
+		DataOutputStream outToServer = null;
+		byte len = 0;
+		try {
+			inFromServer = new DataInputStream(connectionSocket.getInputStream());
+			outToServer = new DataOutputStream(connectionSocket.getOutputStream());
+			len = inFromServer.readByte();
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			e1.printStackTrace();
+		}
+		byte[] query = new byte[len];
+		try {
+			inFromServer.readFully(query);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+		JPanel panel = new JPanel();
+		JLabel label = new JLabel("Enter a password:");
+		JPasswordField pass = new JPasswordField(4);
+		panel.add(label);
+		panel.add(pass);
+		String[] options = new String[]{"OK"};
+		int option = JOptionPane.showOptionDialog(null, panel, "Insert PIN code",
+		                         JOptionPane.NO_OPTION, JOptionPane.PLAIN_MESSAGE,
+		                         null, options, options[0]);
+		char[] passwordChar = pass.getPassword();
+		byte[] password = new byte[passwordChar.length];
+		for (int i = 0; i < passwordChar.length; i++) {
+			password[i] = (byte) Character.getNumericValue(passwordChar[i]);
+			
+		}
+		
+		byte[] queryForCard = new byte[2 + SIZE_OF_PIN + len];
+		queryForCard[0] = len;
+		System.out.println("QUERY LEN : " + query.length);
+		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(query));
+		System.arraycopy(query, 0, queryForCard, 1, len);
+		System.arraycopy(password, 0, queryForCard, 1 + len, password.length);
+		
+		
+		CommandAPDU a = new CommandAPDU(IDENTITY_CARD_CLA, QUERY_ATTRIBUTES, 0x00, 0x00, queryForCard);
+
+		try {
+			ResponseAPDU r = connectionWithJavacard.transmit(a);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+		
+		
 	}
 	private static ResponseAPDU end_of_auth(byte[] message, CommandAPDU a, ResponseAPDU r, IConnection c) {
 
@@ -300,6 +386,7 @@ public class Client {
 		}
 
 		c.connect(); 
+		connectionWithJavacard = c;
 
 		try {
 
@@ -332,7 +419,7 @@ public class Client {
 				System.out.println(r);
 				if (r.getSW()!=0x9000) throw new Exception("Applet selection failed");
 			}
-
+			
 			//2. Send PIN
 			authenticate(a,r,c);
 			//			if (r.getSW()==SW_VERIFICATION_FAILED) throw new Exception("PIN INVALID");

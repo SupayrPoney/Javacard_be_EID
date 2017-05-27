@@ -47,13 +47,13 @@ public class HomeMadeCertificate implements java.io.Serializable{
 		Arrays.fill(res, (byte) 0); 
 		//System.out.println(res.length);
 
-		byte[] subjectBytes = new byte[SUBJECT_LEN];
-		System.arraycopy(this.subject, 0, subjectBytes, 0, this.issuer.length);
-		System.arraycopy(subjectBytes, 0, res, 0, SUBJECT_LEN);
-		
 		byte[] issuerBytes = new byte[ISSUER_LEN];
 		System.arraycopy(this.issuer, 0, issuerBytes, 0, this.issuer.length);
-		System.arraycopy(issuerBytes, 0, res, SUBJECT_LEN, ISSUER_LEN);
+		System.arraycopy(issuerBytes, 0, res, 0, ISSUER_LEN);
+
+		byte[] subjectBytes = new byte[SUBJECT_LEN];
+		System.arraycopy(this.subject, 0, subjectBytes, 0, this.subject.length);
+		System.arraycopy(subjectBytes, 0, res, ISSUER_LEN, SUBJECT_LEN);
 		
 		byte[] modulus = new byte[MODULUS_LEN];
 		byte[] shrinkedModulus = Arrays.copyOfRange(this.publicKeyModulus, 1, this.publicKeyModulus.length);
@@ -85,14 +85,13 @@ public class HomeMadeCertificate implements java.io.Serializable{
 		byte[] res = new byte[SUBJECT_LEN + ISSUER_LEN + 2*DATE_LEN + EXPONENT_LEN + MODULUS_LEN];
 		Arrays.fill(res, (byte) 0); 
 		//System.out.println(res.length);
-
-		byte[] subjectBytes = new byte[SUBJECT_LEN];
-		System.arraycopy(this.subject, 0, subjectBytes, 0, this.issuer.length);
-		System.arraycopy(subjectBytes, 0, res, 0, SUBJECT_LEN);
-		
 		byte[] issuerBytes = new byte[ISSUER_LEN];
 		System.arraycopy(this.issuer, 0, issuerBytes, 0, this.issuer.length);
-		System.arraycopy(issuerBytes, 0, res, SUBJECT_LEN, ISSUER_LEN);
+		System.arraycopy(issuerBytes, 0, res, 0, ISSUER_LEN);
+
+		byte[] subjectBytes = new byte[SUBJECT_LEN];
+		System.arraycopy(this.subject, 0, subjectBytes, 0, this.subject.length);
+		System.arraycopy(subjectBytes, 0, res, ISSUER_LEN, SUBJECT_LEN);
 		
 		byte[] modulus = new byte[MODULUS_LEN];
 		byte[] shrinkedModulus = Arrays.copyOfRange(this.publicKeyModulus, 1, this.publicKeyModulus.length);

@@ -67,7 +67,8 @@ public class Test {
 		keyStore.load(fis, "ThisIs4V3ryS4f3Pa$$w0rd".toCharArray());
 		fis.close();
 
-		String subject = "javacard";
+		String subject = "egov1";
+		String issuer = "egov";
 		
 		Certificate selfSignedCert = keyStore.getCertificate(subject);
 		RSAPublicKey pubKey = (RSAPublicKey) selfSignedCert.getPublicKey();
@@ -99,13 +100,14 @@ public class Test {
 		validUntilBytes[yearTillBytes.length + 3] = (byte) toDate[4];
 		
 		byte[] subjectBytes = subject.getBytes();
+		byte[] issuerBytes = issuer.getBytes();
 		
-		HomeMadeCertificate cert = new HomeMadeCertificate(subjectBytes, subjectBytes, exponent, modulus, sign, validFromBytes, validUntilBytes);
+		HomeMadeCertificate cert = new HomeMadeCertificate(issuerBytes, subjectBytes, exponent, modulus, sign, validFromBytes, validUntilBytes);
 
 		signCertificate(cert);
 		
 		
-		//cert.save();
+		cert.save();
 		
 //		
 //		HomeMadeCertificate deserCert = restoreCert(subject);
