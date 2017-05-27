@@ -48,6 +48,7 @@ public class Client {
 	private static final short MODULUS_LEN = 64; 
 
 	private static final short SIGN_LEN = 64; 
+	private static final short SIZE_OF_CERT = ISSUER_LEN + SUBJECT_LEN + 2*DATE_LEN + EXPONENT_LEN + MODULUS_LEN + SIGN_LEN;
 
 	private static final short SIZE_OF_AES = 16;
 
@@ -166,7 +167,16 @@ public class Client {
 				return;
 			}
 			//TODO
-
+			short padding = (short) (16 - ((SIGN_LEN + SIZE_OF_CERT)%16));
+			byte[] paddedResponse = Arrays.copyOfRange(r.getData(),(short) 6+encryptedChallenge.length, r.getData().length);
+			byte[] len =  intToBytes(SIGN_LEN + SIZE_OF_CERT + padding);
+			byte[] paddingLen = intToBytes(padding);
+			byte[] paddedResponseWithLength = new byte[paddedResponse.length + len.length + paddingLen.length];
+			System.arraycopy(len, 0, paddedResponseWithLength, 0, 4);
+			System.arraycopy(paddingLen, 0, paddedResponseWithLength, 4, 4);
+			System.arraycopy(paddedResponse, 0, paddedResponseWithLength, 8, paddedResponse.length);
+			outToServer.write(paddedResponseWithLength);
+			
 		}
 
 
@@ -191,6 +201,11 @@ public class Client {
 		return r;
 
 	}
+	private static byte[] intToBytes(int input){
+		return ByteBuffer.allocate(4).putInt(input).array();
+		
+	}
+	
 	private static int bytesToInt(byte[] bytes, int offset){
 		return bytes[offset] << 24 | (bytes[offset+1] & 0xFF) << 16 | (bytes[offset+2] & 0xFF) << 8 | (bytes[offset+3] & 0xFF);
 	}

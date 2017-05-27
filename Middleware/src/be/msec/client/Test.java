@@ -105,7 +105,7 @@ public class Test {
 		signCertificate(cert);
 		
 		
-		cert.save();
+		//cert.save();
 		
 //		
 //		HomeMadeCertificate deserCert = restoreCert(subject);
@@ -138,10 +138,9 @@ public class Test {
 			signEngine.initSign(caPrivKey);
 			signEngine.update(cert.getAsBytesWithoutSign());
 			byte[] signature = signEngine.sign();
-			System.out.println(signature.length);
 			cert.setSignature(signature);
-			System.out.println(cert.getAsBytesWithSign().length);
-			byteArrayToPrintable(cert.getAsBytesWithSign());
+			System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(signature));
+			//byteArrayToPrintable(cert.getAsBytesWithSign());
 		} catch (Exception e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();

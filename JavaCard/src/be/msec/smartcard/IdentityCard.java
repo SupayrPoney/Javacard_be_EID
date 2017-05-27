@@ -90,7 +90,7 @@ public class IdentityCard extends Applet {
 	private static final short SIZE_OF_AES = 16;
 	private static final short SIZE_OF_PADDED_CHALLENGE = 16;
 	private static final short SIZE_OF_AUTH = 4;
-	private static final short SIZE_OF_CERT = 179;
+	private static final short SIZE_OF_CERT = ISSUER_LEN + SUBJECT_LEN + 2*DATE_LEN + EXPONENT_LEN + MODULUS_LEN + SIGN_LEN;
 	
 	
 	private final static byte PIN_TRY_LIMIT =(byte)0x03;
@@ -148,13 +148,19 @@ public class IdentityCard extends Applet {
 	private short authStep = 0;
 	
 	//TODO nymu,SP - hash(UserID ++ hash(cerificate_SP))
-	private String name;
-	private String address;
-	private String country;
-	private String birthDate;
-	private short age;
-	private char gender;
-	byte[] picture;
+	private byte[] name = new byte[32];
+	private byte[] address = new byte[48];
+	private byte[] country = new byte[2];
+	private byte[] birthDate = new byte[6];
+	private byte donor;
+	private byte age;
+	private byte gender;
+	byte[] picture = new byte[]{0x30, 0x35, 0x37, 0x36, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04};
+	
+	private byte NAME_INDEX = 0;
+	private byte ADDRESS_INDEX = 1;
+	
+	private byte[] canEgovAccess = {NAME_INDEX,};
 	
 	
 	private IdentityCard() {
@@ -164,13 +170,23 @@ public class IdentityCard extends Applet {
 		 */
 		pin = new OwnerPIN(PIN_TRY_LIMIT,PIN_SIZE);
 		pin.update(new byte[]{0x01,0x02,0x03,0x04},(short) 0, PIN_SIZE);
-		name = "Jean Dupont";
-		address = "23 Roadlane Texas";
-		country = "Belgium";
-		birthDate = "23/04/1965";
-		gender = 'M';
+		name = "Jean Dupont".getBytes();
+		address = "23 Roadlane Texas".getBytes();
+		country = "BE".getBytes();
+
+		byte[] yearBytes = ByteBuffer.allocate(4).putInt(1965).array();
+		byte[] timeBytes = new byte[6];
+		System.arraycopy(yearBytes, 0, timeBytes, 0, 4);
+		timeBytes[4] = 4;
+		timeBytes[5] = 23;
+		
+		// 0 is Male, 1 is female. Other numbers can also be used for other genders.
+		gender = 0;
+		// 0 is no donor, 1 is full donor. Other numbers (till 255) for special kinds of donor
+		donor = 1;
+		
+
 		//TODO PICTURE
-		//TODO NEW ATTRIBUTES
 		
 		/*
 		 * This method registers the applet with the JCRE on the card.
@@ -620,6 +636,7 @@ public class IdentityCard extends Applet {
 	
 
 	private void auth_card(APDU apdu) {
+		System.out.println("STEP 3\n");
 		byte[] buffer = apdu.getBuffer();
 		Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, aesEncryptBytes,(short) 0, SIZE_OF_AES);
 		// step 3.4
@@ -639,7 +656,7 @@ public class IdentityCard extends Applet {
 			    
 			    cipher.doFinal(aesEncryptBytes, (short) 0, (short) aesEncryptBytes.length, paddedChallenge, (short) 0);
 
-			    //System.out.println("Challenge: " + javax.xml.bind.DatatypeConverter.printHexBinary(paddedChallenge));
+			    System.out.println("Challenge: " + javax.xml.bind.DatatypeConverter.printHexBinary(paddedChallenge));
 		// step 3.6
 			    Util.arrayCopy(paddedChallenge, SHORTZERO, challenge, SHORTZERO, (short) challenge.length); 
 		        javacard.security.Signature signEngine = javacard.security.Signature.getInstance(javacard.security.Signature.ALG_RSA_SHA_PKCS1, false);
@@ -657,14 +674,16 @@ public class IdentityCard extends Applet {
 				Util.arrayCopy(challenge, (short) 0, concatChallengeAuth, (short) 0, SIZE_OF_CHALLENGE);
 				Util.arrayCopy(authText, (short) 0, concatChallengeAuth, SIZE_OF_CHALLENGE, SIZE_OF_AUTH);
 				
-				md.doFinal(concatChallengeAuth, (short) 0,(short)concatChallengeAuth.length, hashedArray, (short) 0);
+				System.out.println("BEFORE HASHING: " + javax.xml.bind.DatatypeConverter.printHexBinary(concatChallengeAuth));
 				
-				//TODO
+				md.doFinal(concatChallengeAuth, (short) 0,(short)concatChallengeAuth.length, hashedArray, (short) 0);
+				System.out.println("AFTER HASHING: " + javax.xml.bind.DatatypeConverter.printHexBinary(hashedArray));
+				
 				signEngine.sign(hashedArray, (short) 0, (short)hashedArray.length, signatureBytes, (short)0);
 				
 		// step 3.7
 				Util.arrayCopy(javacardCert, SHORTZERO, certificateAndSignature, SHORTZERO, SIZE_OF_CERT);
-				Util.arrayCopy(signatureBytes, SHORTZERO, certificateAndSignature, SHORTZERO, SIGN_LEN);
+				Util.arrayCopy(signatureBytes, SHORTZERO, certificateAndSignature, SIZE_OF_CERT, SIGN_LEN);
 				
 				
 			    javacardx.crypto.Cipher encryptCipher = javacardx.crypto.Cipher.getInstance(javacardx.crypto.Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
@@ -683,8 +702,13 @@ public class IdentityCard extends Applet {
 
 				
 				byte[] encryptedCertificateAndSignature = new byte[certificateAndSignature.length + sizeToAdd];
-			    cipher.doFinal(paddedDataToEncrypt, (short) 0, (short) paddedDataToEncrypt.length, encryptedCertificateAndSignature, (short) 0);
-		// step 3.8
+				encryptCipher.doFinal(paddedDataToEncrypt, (short) 0, (short) paddedDataToEncrypt.length, encryptedCertificateAndSignature, (short) 0);
+				
+				byte[] keybytes = new byte[16];
+				symKey.getKey(keybytes, SHORTZERO);
+				
+	  // step 3.8
+				System.out.println("CERTIFICATE:\n" + javax.xml.bind.DatatypeConverter.printHexBinary(javacardCert));
 
 				apdu.setOutgoing();
 				apdu.setOutgoingLength((short)encryptedCertificateAndSignature.length);
