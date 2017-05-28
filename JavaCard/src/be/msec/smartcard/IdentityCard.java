@@ -1,43 +1,12 @@
 package be.msec.smartcard;
 
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.ObjectInputStream;
 import java.io.UnsupportedEncodingException;
-import java.lang.reflect.Array;
-import java.math.BigInteger;
 import java.nio.ByteBuffer;
-import java.security.InvalidAlgorithmParameterException;
-import java.security.InvalidKeyException;
-import java.security.Key;
-import java.security.KeyFactory;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.security.PublicKey;
-import java.security.SecureRandom;
-import java.security.Signature;
-import java.security.SignatureException;
-import java.security.cert.Certificate;
-import java.security.interfaces.RSAPublicKey;
-import java.security.spec.InvalidKeySpecException;
-import java.security.spec.RSAPrivateKeySpec;
-import java.security.spec.RSAPublicKeySpec;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.Date;
 
-import javax.crypto.BadPaddingException;
-import javax.crypto.Cipher;
-import javax.crypto.IllegalBlockSizeException;
-import javax.crypto.KeyGenerator;
-import javax.crypto.NoSuchPaddingException;
-import javax.crypto.SecretKey;
-import javax.crypto.spec.IvParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
-
-import helpers.HomeMadeCertificate;
 import javacard.framework.APDU;
 import javacard.framework.Applet;
 import javacard.framework.ISO7816;
@@ -45,7 +14,6 @@ import javacard.framework.ISOException;
 import javacard.framework.OwnerPIN;
 import javacard.framework.Util;
 import javacard.security.AESKey;
-import javacard.security.CryptoException;
 import javacard.security.KeyBuilder;
 //import javacard.security.Signature;
 import javacard.security.RandomData;
@@ -132,13 +100,15 @@ public class IdentityCard extends Applet {
 	private byte[] paddedEncryptedData = new byte[64];
 	private byte[] encryptedChallenge = new byte[32];
 	private byte[] dataToEncrypt = new byte[SIZE_OF_CHALLENGE + SUBJECT_LEN]; 
+	private byte[] lenAndEncryptedPaddedChallenge = new byte[SIZE_OF_INT + SIZE_OF_PADDED_CHALLENGE];
+	private byte[] lenAndpaddedChallenge = new byte[SIZE_OF_INT + SIZE_OF_PADDED_CHALLENGE];
 	
 	private byte[] paddedDataToEncrypt_1 = new byte[32];
 	private byte[] randomGeneratedData = new byte[128];
 
 	private byte[] response = new byte[4 + 4 + paddedEncryptedData.length +  encryptedChallenge.length];
 	private byte[] certificateAndSignature = new byte[SIGN_LEN + SIZE_OF_CERT];
-	private short sizeToAdd = (short) (16 - (certificateAndSignature.length%16));
+	private short  sizeToAdd = (short) (16 - (certificateAndSignature.length%16));
 	private byte[] paddedDataToEncrypt = new byte[certificateAndSignature.length + sizeToAdd];
 	
 
@@ -318,7 +288,7 @@ public class IdentityCard extends Applet {
 	}
 	
 	
-	private void verify_time_signature(APDU apdu) throws NoSuchAlgorithmException, InvalidKeySpecException, InvalidKeyException, SignatureException{
+	private void verify_time_signature(APDU apdu) {
 		//4 bytes for len, 8 for date, rest for sign
 		System.out.println("VERIF");
 		byte[] buffer = apdu.getBuffer();
@@ -335,11 +305,9 @@ public class IdentityCard extends Applet {
 			readCount = apdu.receiveBytes(ISO7816.OFFSET_CDATA);
 		}
         int len = bigStorage[0] << 24 | (bigStorage[1] & 0xFF) << 16 | (bigStorage[2] & 0xFF) << 8 | (bigStorage[3] & 0xFF);
- 
-        byte[] sigToVerify = new byte[len - SIZE_OF_INT - SIZE_OF_DATE];//TODO
-        
+                
         Util.arrayCopy(bigStorage, (short) SIZE_OF_INT, dateBuffer, (short) 0, (short)(SIZE_OF_DATE));
-        Util.arrayCopy(bigStorage, (short) (SIZE_OF_INT + SIZE_OF_DATE), sigToVerify, (short) 0, (short)(len - SIZE_OF_INT - SIZE_OF_DATE));
+        Util.arrayCopy(bigStorage, (short) (SIZE_OF_INT + SIZE_OF_DATE), signatureBytes, (short) 0, (short)(len - SIZE_OF_INT - SIZE_OF_DATE));
 
 		javacard.security.RSAPublicKey timestampPubKey = (javacard.security.RSAPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_512, false);
 
@@ -353,7 +321,7 @@ public class IdentityCard extends Applet {
 		javacard.security.MessageDigest md = javacard.security.MessageDigest.getInstance(javacard.security.MessageDigest.ALG_SHA_256, false);
 		md.reset();
 		md.doFinal(dateBuffer, (short) 0,(short)dateBuffer.length, hashedArray, (short) 0);
-		boolean verifies = signEngine.verify(hashedArray, (short) 0, (short) hashedArray.length, sigToVerify, (short) 0, (short)sigToVerify.length);
+		boolean verifies = signEngine.verify(hashedArray, (short) 0, (short) hashedArray.length, signatureBytes, (short) 0, (short)signatureBytes.length);
 		if (! verifies){
 			ISOException.throwIt(SW_TIME_SIGNATURE_VERIFICATION_FAILED);
 		}
@@ -899,8 +867,9 @@ public class IdentityCard extends Applet {
 		byte[] buffer = apdu.getBuffer();
 		Util.arrayCopy(buffer, (short)ISO7816.OFFSET_CDATA, fourBytes, (short)0, (short)4);
 		short size = (short) bytesToInt(fourBytes, 0);
-		byte[] encryptedResponse = new byte[size];//TODO
-		Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA + 4), encryptedResponse,(short) 0, size);
+		System.out.println();
+        System.out.println("WE TRYIN TO DELETE NEWS HERE BITCH: " + size);
+		Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA + 4), lenAndEncryptedPaddedChallenge,(short) 0, size);
 
         byte[] ivBytes = null;
 		try {
@@ -920,15 +889,14 @@ public class IdentityCard extends Applet {
 //		} catch (InvalidAlgorithmParameterException e) {
 //			System.out.println("InvalidAlgorithmParameterException");
 //		}
-		byte[] response = new byte[size];//TODO
 		
 		
-		Util.arrayCopy(encryptedResponse, (short) 0, aesEncryptBytes, (short) 0, (short)aesEncryptBytes.length);
+		Util.arrayCopy(lenAndEncryptedPaddedChallenge, (short) 0, aesEncryptBytes, (short) 0, (short)aesEncryptBytes.length);
 		
-		cipher.doFinal(aesEncryptBytes, (short)0,(short) aesEncryptBytes.length,response,(short) 0);
+		cipher.doFinal(aesEncryptBytes, (short)0,(short) aesEncryptBytes.length,lenAndEncryptedPaddedChallenge,(short) 0);
 		
 		
-		int responseShort =  (response[0] << 8 | (response[1] & 0xFF));
+		int responseShort =  (lenAndEncryptedPaddedChallenge[0] << 8 | (lenAndEncryptedPaddedChallenge[1] & 0xFF));
 		short previousChallenge = (short)  (challenge[0] << 8 | (challenge[1] & 0xFF));
 		if (responseShort != previousChallenge+1) {
 			ISOException.throwIt(SW_WRONG_CHALLENGE);
