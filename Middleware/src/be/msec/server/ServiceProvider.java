@@ -1,6 +1,8 @@
 package be.msec.server;
 
+import java.awt.image.BufferedImage;
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
@@ -41,7 +43,10 @@ import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+import javax.imageio.ImageIO;
+import javax.swing.ImageIcon;
 import javax.swing.JFrame;
+import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTextArea;
@@ -73,7 +78,7 @@ public class ServiceProvider {
 	private byte gender;
 	byte[] picture = new byte[]{0x30, 0x35, 0x37, 0x36, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04};
 
-	private final byte NYM_INDEX = 0;
+	private final byte NYM_INDEX = 9;
 	private final byte NAME_INDEX = 1;
 	private final byte ADDRESS_INDEX = 2;
 	private final byte COUNTRY_INDEX = 3;
@@ -245,8 +250,7 @@ public class ServiceProvider {
 				System.arraycopy(SPName.getBytes(), 0, spNameBuffer, 0, SPName.getBytes().length);
 				String paddedSPName = new String(spNameBuffer);
 				if (!paddedSPName.equals(certSubject)) {
-					System.out.println("Test");
-					return ;
+					JOptionPane.showMessageDialog(null, "The subject does not correspond to the certificate.");
 				}
 				
 			// Step 2.12
@@ -456,7 +460,6 @@ public class ServiceProvider {
 		boolean verifies = false;
 		try {
 			verifies = signEngine.verify(certificateSignature);
-			System.out.println("VERIFY: " + verifies);
 		} catch (SignatureException e) {
 			// 
 			e.printStackTrace();
@@ -494,8 +497,8 @@ public class ServiceProvider {
 				javacardSignEngine.update(hashedConcatChallengeAuth);
 				boolean javacardSignVerfies = javacardSignEngine.verify(signedHashedChallenge);
 				if (! javacardSignVerfies) {
+					JOptionPane.showMessageDialog(null, "The javacard signing verification failed.");
 					return "";
-					//step4(welcomeSocket, symKey);
 				}
 				
 			} catch (NoSuchAlgorithmException e) {
@@ -508,6 +511,9 @@ public class ServiceProvider {
 				e.printStackTrace();
 			}
 			
+		}else{
+
+			JOptionPane.showMessageDialog(null, "The javacard certificate verification failed.");
 		}
 		return "";
 		
@@ -518,12 +524,11 @@ public class ServiceProvider {
 	}
 	
 
-	public void step4(){
+	public void step4(byte[] query){
 
 		Socket clientSocketSP;
 		DataOutputStream outToClient = null;
 		DataInputStream inFromClient  = null;
-		byte[] query = {NYM_INDEX, NAME_INDEX, ADDRESS_INDEX, COUNTRY_INDEX, BIRTHDATE_INDEX, AGE_INDEX, GENDER_INDEX};
 		try {
 			clientSocketSP = new Socket("localhost", 9988);
 			outToClient = new DataOutputStream(clientSocketSP.getOutputStream());
@@ -579,8 +584,11 @@ public class ServiceProvider {
 		}
 		String display = "";
 		int offset = 0;
+		System.out.println(query.length);
 		for (int i = 0; i < query.length; i++) {
+			System.out.println(query[i]);
 			byte requestedData = query[i];
+			System.out.println(requestedData);
 			display += "\n";
 			switch (requestedData) {
 		// step 4.9
@@ -641,12 +649,11 @@ public class ServiceProvider {
 				break;
 
 			default:
-				System.out.println("ARGUMENT NON AVAILABLE");
 				break;
 			}
-			
+			System.out.println(display);
 			JFrame frame = new JFrame("JOptionPane showMessageDialog example");
-//	        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+	        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
 	        final JPanel panel = new JPanel();
 	        JTextArea textArea = new JTextArea(
@@ -664,15 +671,6 @@ public class ServiceProvider {
 	        frame.setVisible(true);
 //		    System.exit(0);
 		}
-//		System.arraycopy(paddedQueryResult, 0, nym, 0, nym.length);
-//		System.arraycopy(paddedQueryResult, nym.length, name, 0, name.length);
-//		System.arraycopy(paddedQueryResult, name.length, address, 0, address.length);
-//		System.arraycopy(paddedQueryResult, address.length, country, 0, country.length);
-//		System.arraycopy(paddedQueryResult, country.length, birthDate, 0, birthDate.length);
-//		donor = paddedQueryResult[birthDate.length];
-//		age = paddedQueryResult[birthDate.length+1];
-//		gender = paddedQueryResult[birthDate.length+2];
-//		System.arraycopy(paddedQueryResult, birthDate.length+3, picture, 0, picture.length);
 		
 
 		//TODO

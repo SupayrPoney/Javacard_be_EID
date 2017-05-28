@@ -23,6 +23,7 @@ import javax.swing.JComboBox;
 import javax.swing.DefaultComboBoxModel;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
+import javax.swing.JCheckBox;
 
 public class SPSelection extends JFrame {
 
@@ -34,6 +35,15 @@ public class SPSelection extends JFrame {
 	JLabel lblDomain = new JLabel("Domain");
 	JButton btnNewButton = new JButton("Select Service");
 	final JComboBox<String> comboBox_1 = new JComboBox<String>();
+	JCheckBox chckbxName = new JCheckBox("Name");
+	JCheckBox chckbxAddress = new JCheckBox("Address");
+	JCheckBox chckbxCountry = new JCheckBox("Country");
+	JCheckBox chckbxBirthDate = new JCheckBox("Birth date");
+	JCheckBox chckbxAge = new JCheckBox("Age");
+	JCheckBox chckbxgender = new JCheckBox("Gender");
+	JCheckBox chckbxPicture = new JCheckBox("Picture");
+	JCheckBox chckbxDonor = new JCheckBox("Donor");
+	JCheckBox[] checkboxes = {chckbxName,chckbxAddress,chckbxCountry,chckbxBirthDate,chckbxDonor,chckbxAge,chckbxgender,chckbxPicture};
 
 	/**
 	 * Launch the application.
@@ -44,9 +54,9 @@ public class SPSelection extends JFrame {
 				try {
 					HashMap<String, String[]> allServices = new HashMap<String, String[]>();
 					allServices.put("eGov", new String[]{"egov1","egov2"});
-					allServices.put("SocNet", new String[]{"serviceSocNet1","serviceSocNet2"});
-					//allServices.put("default", new String[]{"serviceDefault1","serviceDefault2"});
-					allServices.put("health", new String[]{"healthService1","healthService2"});
+					allServices.put("SocNet", new String[]{"socnet1","socnet2"});
+					allServices.put("default", new String[]{"default1","default2"});
+					allServices.put("health", new String[]{"health1","health2"});
 					SPSelection frame = new SPSelection(allServices);
 					frame.setVisible(true);
 				} catch (Exception e) {
@@ -69,7 +79,7 @@ public class SPSelection extends JFrame {
 		gbl_contentPane.columnWidths = new int[]{219, 219, 0};
 		gbl_contentPane.rowHeights = new int[]{132, 132, 0, 0, 0};
 		gbl_contentPane.columnWeights = new double[]{1.0, 0.0, Double.MIN_VALUE};
-		gbl_contentPane.rowWeights = new double[]{0.0, 1.0, 0.0, 0.0, Double.MIN_VALUE};
+		gbl_contentPane.rowWeights = new double[]{0.0, 1.0, 1.0, 0.0, Double.MIN_VALUE};
 		contentPane.setLayout(gbl_contentPane);
 		
 		JPanel panel = new JPanel();
@@ -85,6 +95,18 @@ public class SPSelection extends JFrame {
 		JLabel lblNewLabel = new JLabel("Select a Service Provider");
 		panel.add(lblNewLabel);
 		lblNewLabel.setHorizontalAlignment(SwingConstants.CENTER);
+		
+		JPanel panel_3 = new JPanel();
+		panel.add(panel_3);
+
+		panel_3.add(chckbxName);
+		panel_3.add(chckbxAddress);
+		panel_3.add(chckbxCountry);
+		panel_3.add(chckbxBirthDate);
+		panel_3.add(chckbxAge);
+		panel_3.add(chckbxgender);
+		panel_3.add(chckbxPicture);
+		panel_3.add(chckbxDonor);
 		
 		JPanel panel_2 = new JPanel();
 		GridBagConstraints gbc_panel_2 = new GridBagConstraints();
@@ -153,7 +175,19 @@ public class SPSelection extends JFrame {
 			
 			@Override
 			public void actionPerformed(ActionEvent e) {
-				SP.step4();
+				byte[] requestedFields = new byte[8];
+				int i = 0;
+				requestedFields[0] = (byte) 0;
+				for (int j = 0; j < checkboxes.length; j++) {
+					JCheckBox checkbox = checkboxes[j];
+					if (checkbox.isSelected()) {
+						requestedFields[i] = (byte) (j + 1);
+						i += 1;
+					}
+				}
+				requestedFields[i] = (byte) 0x09;
+				System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(requestedFields));
+				SP.step4(requestedFields);
 				
 			}
 		});

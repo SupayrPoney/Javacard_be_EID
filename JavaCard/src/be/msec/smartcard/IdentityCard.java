@@ -106,6 +106,7 @@ public class IdentityCard extends Applet {
 	private final static short SW_CERT_VERIFICATIONR_OR_VALIDATION_FAILED = 0x6305;
 	private final static short SW_WRONG_CHALLENGE = 0x6306;
 	private final static short SW_WRONG_REQUEST = 0x6307;
+	private final static short SW_WRONG_PIN = 0x6308;
 
 	private AESKey symKey = null;
 	private byte[] userUniqueKey = new byte[SIZE_OF_UNIQUE_KEY];
@@ -175,7 +176,7 @@ public class IdentityCard extends Applet {
 	private byte[] paddedResponseToAttributesReleasing = new byte[32 + 32 + 48 + 2 + 6 + 1 + 1 + 1 + 16 + 5];//Multiple of 16 for encryption
 	private byte[] encryptedPaddedResponseToAttributesReleasing = new byte[32 + 32 + 48 + 2 + 6 + 1 + 1 + 1 + 16 + 5];//Multiple of 16 for encryption result
 	
-	private final byte NYM_INDEX = 0;
+	private final byte NYM_INDEX = 9;
 	private final byte NAME_INDEX = 1;
 	private final byte ADDRESS_INDEX = 2;
 	private final byte COUNTRY_INDEX = 3;
@@ -184,7 +185,8 @@ public class IdentityCard extends Applet {
 	private final byte AGE_INDEX = 6;
 	private final byte GENDER_INDEX = 7;
 	private final byte PICTURE_INDEX = 8;
-	
+
+	SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd-HH-mm");
 
 	private byte[] canEgovAccess = {NYM_INDEX, NAME_INDEX, ADDRESS_INDEX, COUNTRY_INDEX, BIRTHDATE_INDEX, AGE_INDEX, GENDER_INDEX};
 	private byte[] canSocNetAccess = {NYM_INDEX, NAME_INDEX, COUNTRY_INDEX, AGE_INDEX, GENDER_INDEX, PICTURE_INDEX};
@@ -274,13 +276,11 @@ public class IdentityCard extends Applet {
 		
 		String lastValidationString = String.join("-", lastValidationTime);
 		
-		SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd-HH-mm");
 		
 		try {
 			Date currentDate = format.parse(currentTimeString);
 			Date lastValidationDate = format.parse(lastValidationString);
 			if((currentDate.getTime() - lastValidationDate.getTime())/(1000*60*60*24) > 1){
-				System.out.println("DELTA: "+(currentDate.getTime() - lastValidationDate.getTime())/(1000*60*60*24));
 				apdu.setOutgoing();
 				apdu.setOutgoingLength((short)1);
 				Util.setShort(buffer,(short) 0, (short) 1);
@@ -288,6 +288,10 @@ public class IdentityCard extends Applet {
 				
 			}
 			else {
+				apdu.setOutgoing();
+				apdu.setOutgoingLength((short)1);
+				Util.setShort(buffer,(short) 0, (short) 1);
+				apdu.sendBytes((short) 0x00,(short)0);
 				
 			}
 		} catch (ParseException e) {
@@ -321,27 +325,12 @@ public class IdentityCard extends Applet {
         
         Util.arrayCopy(bigStorage, (short) sizeOfLen, timeToVerify, (short) 0, (short)(sizeOfTime));
         Util.arrayCopy(bigStorage, (short) (sizeOfLen + sizeOfTime), sigToVerify, (short) 0, (short)(len - sizeOfLen - sizeOfTime));
-		
-//		RSAPublicKeySpec spec = new RSAPublicKeySpec(new BigInteger(uncroppedGovTimePublicModulus), new BigInteger(govTimePublicExponent));
-////		System.out.println(new BigInteger(govTimePublicModulus));
-//		KeyFactory factory = KeyFactory.getInstance("RSA");
-//        RSAPublicKey timestampPubKey =  (RSAPublicKey) factory.generatePublic(spec);
-//sw
-//		Signature signEngine = Signature.getInstance("SHA256withRSA");
-//		signEngine.initVerify(timestampPubKey);
-//		MessageDigest md = MessageDigest.getInstance("SHA-256");
-//
-//		byte[] hashedTime = md.digest(timeToVerify);
-//		signEngine.update(hashedTime, 0, hashedTime.length);
-//		
-//		boolean verifies = signEngine.verify(sigToVerify);
-//		System.out.println(new BigInteger(govTimePublicModulus));
+
 		javacard.security.RSAPublicKey timestampPubKey = (javacard.security.RSAPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_512, false);
 
         timestampPubKey.setExponent(govTimePublicExponent, (short) 0, (short) govTimePublicExponent.length);
         timestampPubKey.setModulus(govTimePublicModulus, (short) 0, (short) govTimePublicModulus.length);
- 		//System.out.println("MODULUS:" + timestampPubKey.getModulus());
-		//System.out.println("EXPONENT:" + timestampPubKey.getPublicExponent());
+
 		
         javacard.security.Signature signEngine = javacard.security.Signature.getInstance(javacard.security.Signature.ALG_RSA_SHA_PKCS1, false);
 		signEngine.init( timestampPubKey, javacard.security.Signature.MODE_VERIFY);
@@ -349,7 +338,6 @@ public class IdentityCard extends Applet {
 		javacard.security.MessageDigest md = javacard.security.MessageDigest.getInstance(javacard.security.MessageDigest.ALG_SHA_256, false);
 		md.reset();
 		md.doFinal(timeToVerify, (short) 0,(short)timeToVerify.length, hashedArray, (short) 0);
-		//signEngine.update(hashedTime, (short) 0, (short) hashedTime.length);
 		boolean verifies = signEngine.verify(hashedArray, (short) 0, (short) hashedArray.length, sigToVerify, (short) 0, (short)sigToVerify.length);
 		if (! verifies){
 			ISOException.throwIt(SW_TIME_SIGNATURE_VERIFICATION_FAILED);
@@ -699,7 +687,7 @@ public class IdentityCard extends Applet {
 	// step 4.3
 		if (pin.check(pinBuffer, SHORTZERO,PIN_SIZE)==false){
 			System.out.println("INVALID PIN");
-			ISOException.throwIt(SW_VERIFICATION_FAILED);
+			ISOException.throwIt(SW_WRONG_PIN);
 		}
 	// step 4.4
 		else if (auth == (byte)0x00){
@@ -734,6 +722,8 @@ public class IdentityCard extends Applet {
 		// step 4.6
 			System.out.println("4.6");
 			byte requestAccepted = 0x01;
+			System.out.println(queryLen);
+			System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(bigStorage));
 			for (int i = 0; i < queryLen; i++) {
 				byte requestedData = bigStorage[i];
 				byte isRequestedDataAvailable = 0x00;
@@ -742,109 +732,106 @@ public class IdentityCard extends Applet {
 						isRequestedDataAvailable = 0x01;
 					}
 				}
-				if (isRequestedDataAvailable == 0x00) {
+				if (isRequestedDataAvailable == 0x00 && requestedData != (byte) 0x00) {
 					requestAccepted = 0x00;
 					ISOException.throwIt(SW_WRONG_REQUEST);
 				}
 			}
+			System.out.println(requestAccepted);
 			if (requestAccepted != 0x01) {
 				ISOException.throwIt(SW_WRONG_REQUEST);
 				
 			}
+			else{
 		// step 4.7
-			System.out.println("4.7");
-			Util.arrayCopy(userUniqueKey, SHORTZERO, dataFornym, SHORTZERO, SIZE_OF_UNIQUE_KEY);
-			Util.arrayCopy(subjectBuffer, SHORTZERO, dataFornym, SIZE_OF_UNIQUE_KEY, SUBJECT_LEN);
+				System.out.println("4.7");
+				Util.arrayCopy(userUniqueKey, SHORTZERO, dataFornym, SHORTZERO, SIZE_OF_UNIQUE_KEY);
+				Util.arrayCopy(subjectBuffer, SHORTZERO, dataFornym, SIZE_OF_UNIQUE_KEY, SUBJECT_LEN);
 
-			javacard.security.MessageDigest md = javacard.security.MessageDigest.getInstance(javacard.security.MessageDigest.ALG_SHA_256, false);
-			md.reset();
-			System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(subjectBuffer));
-							
-			System.out.println("BEFORE HASHING: " + javax.xml.bind.DatatypeConverter.printHexBinary(dataFornym));
-			
-			md.doFinal(dataFornym, (short) 0,(short)dataFornym.length, nym, (short) 0);
-				
+				javacard.security.MessageDigest md = javacard.security.MessageDigest.getInstance(javacard.security.MessageDigest.ALG_SHA_256, false);
+				md.reset();
+
+				md.doFinal(dataFornym, (short) 0,(short)dataFornym.length, nym, (short) 0);
+
 		// step 4.8
-			//responseToAttributesReleasing
-			short offset = 0;
-			for (int i = 0; i < queryLen; i++) {
-				byte requestedData = bigStorage[i];
-				switch (requestedData) {
-			// step 4.9
-				case NYM_INDEX:
-					Util.arrayCopy(nym, SHORTZERO, responseToAttributesReleasing, offset, (short) nym.length);
-					offset += nym.length;
-					break;
-				case NAME_INDEX:
-					Util.arrayCopy(name, SHORTZERO, responseToAttributesReleasing, offset, (short) name.length);
-					offset += name.length;
-					
-					break;
-				case ADDRESS_INDEX:
-					Util.arrayCopy(address, SHORTZERO, responseToAttributesReleasing, offset, (short) address.length);
-					offset += address.length;
-					
-					break;
-				case COUNTRY_INDEX:
-					Util.arrayCopy(country, SHORTZERO, responseToAttributesReleasing, offset, (short) country.length);
-					offset += country.length;
-					
-					break;
-				case BIRTHDATE_INDEX:
-					Util.arrayCopy(birthDate, SHORTZERO, responseToAttributesReleasing, offset, (short) birthDate.length);
-					offset += birthDate.length;
-					
-					break;
-				case DONOR_INDEX:
-					responseToAttributesReleasing[offset] = donor;
-					offset += 1;
-					break;
-				case AGE_INDEX:
-					responseToAttributesReleasing[offset] = age;
-					offset += 1;
-					
-					break;
-				case GENDER_INDEX:
-					responseToAttributesReleasing[offset] = gender;
-					offset += 1;
-					
-					break;
-				case PICTURE_INDEX:
-					Util.arrayCopy(picture, SHORTZERO, responseToAttributesReleasing, offset, (short) picture.length);
-					offset += picture.length;
-					
-					break;
+				//responseToAttributesReleasing
+				short offset = 0;
+				for (int i = 0; i < queryLen; i++) {
+					byte requestedData = bigStorage[i];
+					switch (requestedData) {
+					// step 4.9
+					case NYM_INDEX:
+						Util.arrayCopy(nym, SHORTZERO, responseToAttributesReleasing, offset, (short) nym.length);
+						offset += nym.length;
+						break;
+					case NAME_INDEX:
+						Util.arrayCopy(name, SHORTZERO, responseToAttributesReleasing, offset, (short) name.length);
+						offset += name.length;
 
-				default:
-					System.out.println("ARGUMENT NON AVAILABLE");
-					break;
+						break;
+					case ADDRESS_INDEX:
+						Util.arrayCopy(address, SHORTZERO, responseToAttributesReleasing, offset, (short) address.length);
+						offset += address.length;
+
+						break;
+					case COUNTRY_INDEX:
+						Util.arrayCopy(country, SHORTZERO, responseToAttributesReleasing, offset, (short) country.length);
+						offset += country.length;
+
+						break;
+					case BIRTHDATE_INDEX:
+						Util.arrayCopy(birthDate, SHORTZERO, responseToAttributesReleasing, offset, (short) birthDate.length);
+						offset += birthDate.length;
+
+						break;
+					case DONOR_INDEX:
+						responseToAttributesReleasing[offset] = donor;
+						offset += 1;
+						break;
+					case AGE_INDEX:
+						responseToAttributesReleasing[offset] = age;
+						offset += 1;
+
+						break;
+					case GENDER_INDEX:
+						responseToAttributesReleasing[offset] = gender;
+						offset += 1;
+
+						break;
+					case PICTURE_INDEX:
+						Util.arrayCopy(picture, SHORTZERO, responseToAttributesReleasing, offset, (short) picture.length);
+						offset += picture.length;
+
+						break;
+
+					default:
+						System.out.println("ARGUMENT NON AVAILABLE");
+						break;
+					}
+
 				}
-				
-			}
-			System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(responseToAttributesReleasing));
 		// step 4.10
 
-			byte[] ivBytes = null;
-			try {
-				ivBytes = "0000111122223333".getBytes("UTF-8");
-			} catch (UnsupportedEncodingException e) {
+				byte[] ivBytes = null;
+				try {
+					ivBytes = "0000111122223333".getBytes("UTF-8");
+				} catch (UnsupportedEncodingException e) {
+				}
+				javacardx.crypto.Cipher cipher = javacardx.crypto.Cipher.getInstance(javacardx.crypto.Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
+				cipher.init(symKey, javacardx.crypto.Cipher.MODE_ENCRYPT, ivBytes, (short)0, (short)ivBytes.length);
+
+
+				//		    System.out.println("Challenge: " + javax.xml.bind.DatatypeConverter.printHexBinary(challenge));
+
+
+				Util.arrayCopy(responseToAttributesReleasing, SHORTZERO, paddedResponseToAttributesReleasing, SHORTZERO,(short) responseToAttributesReleasing.length);
+				cipher.doFinal(paddedResponseToAttributesReleasing, (short) 0, (short) paddedResponseToAttributesReleasing.length, encryptedPaddedResponseToAttributesReleasing, (short) 0);
+				System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(encryptedPaddedResponseToAttributesReleasing));
+				apdu.setOutgoing();
+				apdu.setOutgoingLength((short)encryptedPaddedResponseToAttributesReleasing.length);
+				apdu.sendBytesLong(encryptedPaddedResponseToAttributesReleasing,SHORTZERO,(short)encryptedPaddedResponseToAttributesReleasing.length);
+				//TODO
 			}
-		    javacardx.crypto.Cipher cipher = javacardx.crypto.Cipher.getInstance(javacardx.crypto.Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
-		    cipher.init(symKey, javacardx.crypto.Cipher.MODE_ENCRYPT, ivBytes, (short)0, (short)ivBytes.length);
-		    
-
-//		    System.out.println("Challenge: " + javax.xml.bind.DatatypeConverter.printHexBinary(challenge));
-
-
-			Util.arrayCopy(responseToAttributesReleasing, SHORTZERO, paddedResponseToAttributesReleasing, SHORTZERO,(short) responseToAttributesReleasing.length);
-		    System.out.println("BEFORE DOFINAL");
-		    cipher.doFinal(paddedResponseToAttributesReleasing, (short) 0, (short) paddedResponseToAttributesReleasing.length, encryptedPaddedResponseToAttributesReleasing, (short) 0);
-		    System.out.println("AFTER DOFINAL");
-		    System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(encryptedPaddedResponseToAttributesReleasing));
-			apdu.setOutgoing();
-			apdu.setOutgoingLength((short)encryptedPaddedResponseToAttributesReleasing.length);
-			apdu.sendBytesLong(encryptedPaddedResponseToAttributesReleasing,SHORTZERO,(short)encryptedPaddedResponseToAttributesReleasing.length);
-			//TODO
 		}
 		
 		

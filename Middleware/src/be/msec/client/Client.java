@@ -5,6 +5,10 @@ import be.msec.client.connection.IConnection;
 import be.msec.client.connection.SimulatedConnection;
 import helpers.HomeMadeCertificate;
 
+import java.awt.Font;
+import java.awt.GridLayout;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -29,11 +33,13 @@ import java.util.Date;
 import java.util.Iterator;
 
 import javax.smartcardio.*;
+import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
+import javax.swing.border.EmptyBorder;
 
 
 public class Client {
@@ -67,7 +73,13 @@ public class Client {
 
 	private final static short SW_VERIFICATION_FAILED = 0x6300;
 	private final static short SW_PIN_VERIFICATION_REQUIRED = 0x6301;
+	private final static short SW_TIME_UPDATE_FAILED = 0x6302;
+	private final static short SW_SP_NOT_AUTH = 0x6303;
+	private final static short SW_TIME_SIGNATURE_VERIFICATION_FAILED = 0x6304;
+	private final static short SW_CERT_VERIFICATIONR_OR_VALIDATION_FAILED = 0x6305;
 	private final static short SW_WRONG_CHALLENGE = 0x6306;
+	private final static short SW_WRONG_REQUEST = 0x6307;
+	private final static short SW_WRONG_PIN = 0x6308;
 
 	private final static short SIZE_OF_INT_IN_BYTES = 4;
 	private static IConnection connectionWithJavacard;
@@ -120,8 +132,8 @@ public class Client {
 			byte[] dataOut = Arrays.copyOfRange(r.getData(),(short) 5 + len, 5 + len+1); 
 			response = dataOut[0];			
 		}
+		boolean shouldContinue = true;
 		if (r.getSW() == 0x9000) {
-			System.out.println("SUCCESS");
 			// authenticateSP
 			Socket clientSocketSP = new Socket("localhost", 9999);
 			DataOutputStream outToServer = new DataOutputStream(clientSocketSP.getOutputStream());
@@ -154,12 +166,10 @@ public class Client {
 				System.out.println(msgLen);
 				int newMsgLen = msgLen -1;
 				command = (int) dIn.read();
-				System.out.println("BEFORE");
 				if((msgLen - 1)>0) {
 					message = new byte[msgLen - 5];
 					dIn.readFully(message); // read the message
 				}
-				System.out.println("RECEIVED");
 				byte[] dataToSend = new byte[newMsgLen];
 				System.arraycopy(ByteBuffer.allocate(4).putInt(newMsgLen).array(), 0, dataToSend, 0, 4);
 				System.arraycopy(message, 0, dataToSend, 4, message.length);
@@ -167,9 +177,16 @@ public class Client {
 				clientSocketSP.close();
 
 			}
+			else{
+				shouldContinue = false;
+				JOptionPane.showMessageDialog(null, "The time verification failed.");
+				
+			}
 		}
-		System.out.println("B - " + r);
-		if (r.getSW() == 0x9000) {
+		else{
+			JOptionPane.showMessageDialog(null, "The time verification failed.");
+		}
+		if (r.getSW() == 0x9000 && shouldContinue) {
 			//Step 3
 			Socket clientSocketSP = new Socket("localhost", 9999);
 			DataOutputStream outToServer = new DataOutputStream(clientSocketSP.getOutputStream());
@@ -180,20 +197,28 @@ public class Client {
 
 			a = new CommandAPDU(IDENTITY_CARD_CLA, AUTHENTICATE_CARD, 0x00, 0x00, encryptedChallenge);
 			r = c.transmit(a);
-			if (r.getSW() != 0x9000) {
-				return;
+			if (r.getSW() == 0x9000) {
+				short padding = (short) (16 - ((SIGN_LEN + SIZE_OF_CERT)%16));
+				byte[] paddedResponse = Arrays.copyOfRange(r.getData(),(short) 6+encryptedChallenge.length, r.getData().length);
+				byte[] len =  intToBytes(SIGN_LEN + SIZE_OF_CERT + padding);
+				byte[] paddingLen = intToBytes(padding);
+				byte[] paddedResponseWithLength = new byte[paddedResponse.length + len.length + paddingLen.length];
+				System.arraycopy(len, 0, paddedResponseWithLength, 0, 4);
+				System.arraycopy(paddingLen, 0, paddedResponseWithLength, 4, 4);
+				System.arraycopy(paddedResponse, 0, paddedResponseWithLength, 8, paddedResponse.length);
+				outToServer.write(paddedResponseWithLength);
+				step4();	
 			}
-			//TODO
-			short padding = (short) (16 - ((SIGN_LEN + SIZE_OF_CERT)%16));
-			byte[] paddedResponse = Arrays.copyOfRange(r.getData(),(short) 6+encryptedChallenge.length, r.getData().length);
-			byte[] len =  intToBytes(SIGN_LEN + SIZE_OF_CERT + padding);
-			byte[] paddingLen = intToBytes(padding);
-			byte[] paddedResponseWithLength = new byte[paddedResponse.length + len.length + paddingLen.length];
-			System.arraycopy(len, 0, paddedResponseWithLength, 0, 4);
-			System.arraycopy(paddingLen, 0, paddedResponseWithLength, 4, 4);
-			System.arraycopy(paddedResponse, 0, paddedResponseWithLength, 8, paddedResponse.length);
-			outToServer.write(paddedResponseWithLength);
-			step4();
+			else if (r.getSW() == SW_SP_NOT_AUTH){
+				JOptionPane.showMessageDialog(null, "The SP is not authenticated.");
+				
+			}
+		}
+		else if (r.getSW() == SW_WRONG_CHALLENGE){
+			JOptionPane.showMessageDialog(null, "The challenge is incorrect.");
+		}
+		else{
+			JOptionPane.showMessageDialog(null, "Unknown error occured");
 		}
 
 
@@ -250,6 +275,7 @@ public class Client {
 		int option = JOptionPane.showOptionDialog(null, panel, "Insert PIN code",
 		                         JOptionPane.NO_OPTION, JOptionPane.PLAIN_MESSAGE,
 		                         null, options, options[0]);
+		
 		char[] passwordChar = pass.getPassword();
 		byte[] password = new byte[passwordChar.length];
 		for (int i = 0; i < passwordChar.length; i++) {
@@ -272,6 +298,7 @@ public class Client {
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
+		System.out.println(r);
 	//4.10
 		if (r.getSW() == 0x9000) {
 			byte[] response = Arrays.copyOfRange(r.getData(),(short) (6+ queryForCard.length), r.getData().length);
@@ -279,9 +306,6 @@ public class Client {
 		    int responseLen = response.length;
 		    byte[] toSendToServer = new byte[responseLen + 4];
 		    System.arraycopy(intToBytes(responseLen), 0, toSendToServer, 0, 4);
-		    System.out.println("responseLen: " + responseLen);
-		    System.out.println("toSendToServer.length: " + toSendToServer.length);
-		    System.out.println("response.length: " + response.length);
 		    System.arraycopy(response, 0, toSendToServer, 4, responseLen);
 		    
 		    try {
@@ -290,21 +314,57 @@ public class Client {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
+
+            int dialogButton = JOptionPane.YES_NO_OPTION;
+		    int dialogResult = JOptionPane.showConfirmDialog (null, "Would You Like to Logout","Warning",dialogButton);
+		    try {
+				connectionSocket.close();
+				welcomeSocket.close();
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		    if(dialogResult == JOptionPane.NO_OPTION){
+		    	step4();
+		    }
 			
+		}else{
+			try {
+				connectionSocket.close();
+				welcomeSocket.close();
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			if (r.getSW() == SW_WRONG_PIN) {
+				JOptionPane.showMessageDialog(null, "Wrong pin code.");
+				
+			}
+			else if(r.getSW() == SW_SP_NOT_AUTH){
+				JOptionPane.showMessageDialog(null, "The SP is not authenticated.");
+				
+			}
+			else if(r.getSW() == SW_WRONG_REQUEST){
+				JOptionPane.showMessageDialog(null, "The requested fields are not all accessible.");
+				
+			}
 		}
+		
+		
+	}
+	private static void logout() {
+		// TODO Auto-generated method stub
 		
 	}
 	private static ResponseAPDU end_of_auth(byte[] message, CommandAPDU a, ResponseAPDU r, IConnection c) {
 
 		//Divide in chunks of 250 bytes
 		a = new CommandAPDU(IDENTITY_CARD_CLA, END_AUTH, 0x00, 0x00, message);
-		System.out.println(message.length);
 		try {
 			r = c.transmit(a);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-		System.out.println("AFTER END AUTH");
 		return r;
 
 	}
@@ -356,7 +416,6 @@ public class Client {
 	}
 
 	private static boolean validate_Time(CommandAPDU a, ResponseAPDU r, IConnection c) throws Exception {
-		// TODO Auto-generated method stub
 		int dataLen = 8;
 		Date currentTime = new Date();
 		LocalDateTime currentTimeDate = currentTime.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
@@ -369,16 +428,11 @@ public class Client {
 		dateBytes[7] = (byte) currentTimeDate.getMinute();
 		a = new CommandAPDU(IDENTITY_CARD_CLA, VALIDATE_TIME, 0x00, 0x00,dateBytes);
 		byte[] dataIn = Arrays.copyOfRange(a.getBytes(), 0x05, 5 + 100); 
-		//	System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(dataIn));
 		r = c.transmit(a);
 		System.out.println(r);
-		//	byte[] date = Arrays.copyOfRange(dataIn, (short)0x00, (short)4);
-		//	int b = date[0] << 24 | (date[1] & 0xFF) << 16 | (date[2] & 0xFF) << 8 | (date[3] & 0xFF);
-		//	System.out.println(b);
 
 		byte[] dataOut = Arrays.copyOfRange(r.getData(),(short) 5 + dataLen, 5 + dataLen+1); 
 		int response = dataOut[0];
-		System.out.println(response);
 		if (response == 1) {
 			return false;
 		} else {
