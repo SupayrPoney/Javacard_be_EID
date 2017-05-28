@@ -128,7 +128,22 @@ public class IdentityCard extends Applet {
 	private byte[] challenge = new byte[SIZE_OF_CHALLENGE];
 	private byte[] paddedChallenge = new byte[SIZE_OF_PADDED_CHALLENGE];
 	private byte[] concatChallengeAuth = new byte[SIZE_OF_CHALLENGE + SIZE_OF_AUTH];
+	private byte[] certificateWithoutSign = new byte [SIZE_OF_CERT - SIGN_LEN];
+	private byte[] paddedEncryptedData = new byte[64];
+	private byte[] encryptedChallenge = new byte[32];
+	private byte[] dataToEncrypt = new byte[SIZE_OF_CHALLENGE + SUBJECT_LEN]; 
 	
+	private byte[] paddedDataToEncrypt_1 = new byte[32];
+	private byte[] randomGeneratedData = new byte[128];
+
+	private byte[] response = new byte[4 + 4 + paddedEncryptedData.length +  encryptedChallenge.length];
+	private byte[] certificateAndSignature = new byte[SIGN_LEN + SIZE_OF_CERT];
+	private short sizeToAdd = (short) (16 - (certificateAndSignature.length%16));
+	private byte[] paddedDataToEncrypt = new byte[certificateAndSignature.length + sizeToAdd];
+	
+
+	private byte[] encryptedCertificateAndSignature = new byte[certificateAndSignature.length + sizeToAdd];
+	private byte[] keybytes = new byte[16];
 
 	byte[] exponent = new byte[EXPONENT_LEN];
 	byte[] validFrom = new byte[DATE_LEN];
@@ -139,7 +154,6 @@ public class IdentityCard extends Applet {
 	byte[] modulus = new byte[MODULUS_LEN+1];
 	byte[] croppedModulus = new byte[MODULUS_LEN];
 	
-	private byte[] certificateAndSignature = new byte[SIGN_LEN + SIZE_OF_CERT];
 	
 	
 	private byte[] serial = new byte[]{0x30, 0x35, 0x37, 0x36, 0x39, 0x30, 0x31, 0x05};
@@ -176,7 +190,6 @@ public class IdentityCard extends Applet {
 	
 	private short authStep = 0;
 	
-	//TODO nymu,SP - hash(UserID ++ hash(cerificate_SP))
 	private byte[] nym = new byte[32];
 	private byte[] name = new byte[32];
 	private byte[] address = new byte[48];
@@ -363,6 +376,7 @@ public class IdentityCard extends Applet {
 			}
 			else{
 				lastValidationTime = new String[]{year,month,day,hour, min};
+				//TODO
 			}
 			arrayOfOne[0] = (byte) response;
 			apdu.setOutgoing();
@@ -423,7 +437,6 @@ public class IdentityCard extends Applet {
 			readCount = apdu.receiveBytes(ISO7816.OFFSET_CDATA);
 		}
 		
-		byte[] response = null;
 		modulus[0] = 0;
 
 		//Store for later
@@ -437,10 +450,8 @@ public class IdentityCard extends Applet {
 		Util.arrayCopy(bigStorage, (short) (SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN + EXPONENT_LEN + DATE_LEN), validUntil,(short) 0x00, DATE_LEN);
 		Util.arrayCopy(bigStorage, (short) (SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN + EXPONENT_LEN + DATE_LEN + DATE_LEN), signature,(short) 0x00, SIGN_LEN);
 		
-		byte[] dataToCheck = new byte[SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN + EXPONENT_LEN + DATE_LEN + DATE_LEN];
-		Arrays.fill(dataToCheck, (byte) 0);
-		Util.arrayCopy(bigStorage, (short) 0, dataToCheck, (short)0,(short) (SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN + EXPONENT_LEN + DATE_LEN + DATE_LEN));
-		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(signature));
+		Arrays.fill(certificateWithoutSign, (byte) 0);
+		Util.arrayCopy(bigStorage, (short) 0, certificateWithoutSign, (short)0,(short) (SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN + EXPONENT_LEN + DATE_LEN + DATE_LEN));
 		
 		
 		boolean verified = false;
@@ -455,7 +466,7 @@ public class IdentityCard extends Applet {
 			mainCaPublicKey.setModulus(mainCAPublicModulus, (short) 0, (short) mainCAPublicModulus.length);
 			javacard.security.Signature SPcheck = javacard.security.Signature.getInstance(javacard.security.Signature.ALG_RSA_SHA_PKCS1, false);
 			SPcheck.init( mainCaPublicKey, javacard.security.Signature.MODE_VERIFY);
-			verified = SPcheck.verify(dataToCheck, (short) 0, (short) dataToCheck.length, signature, (short) 0, (short)signature.length);
+			verified = SPcheck.verify(certificateWithoutSign, (short) 0, (short) certificateWithoutSign.length, signature, (short) 0, (short)signature.length);
 
 		    System.out.println("verified" + verified);
 			
@@ -464,6 +475,7 @@ public class IdentityCard extends Applet {
 			String[] validStart = getDateAsString(validFrom);
 			String[] validTo = getDateAsString(validUntil);
 			SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd-HH-mm");
+			//TODO
 			String lastValidationString = String.join("-", lastValidationTime);
 			String validFromString = String.join("-", validStart);
 			String validToString = String.join("-", validTo);
@@ -492,7 +504,6 @@ public class IdentityCard extends Applet {
 		try {
 			System.out.println("beforeSymKey");
 			//only pseudo_random available on the card
-			byte[] randomGeneratedData = new byte[128];
 			randomizer.generateData(randomGeneratedData, (short) 0, (short) randomGeneratedData.length);
 			key = (AESKey) javacard.security.KeyBuilder.buildKey(KeyBuilder.TYPE_AES, KeyBuilder.LENGTH_AES_128, false);
 			key.setKey(randomGeneratedData, (short) 0);
@@ -511,8 +522,7 @@ public class IdentityCard extends Applet {
 			spPublicKey.setModulus(croppedModulus, (short) 0, (short) croppedModulus.length);
 			rsaenc.init(spPublicKey, javacardx.crypto.Cipher.MODE_ENCRYPT);
 			
-			byte[] encryptedKey = new byte[64];
-			rsaenc.doFinal(symKeyBytes, (short) 0, (short) symKeyBytes.length, encryptedKey, (short) 0);
+			rsaenc.doFinal(symKeyBytes, (short) 0, (short) symKeyBytes.length, paddedEncryptedData, (short) 0);
 			System.out.println("Encryption is ok");
 			
 			//we have to generate a challenge 
@@ -528,29 +538,24 @@ public class IdentityCard extends Applet {
 
 //		    System.out.println("Challenge: " + javax.xml.bind.DatatypeConverter.printHexBinary(challenge));
 			// data that needs to be encrypted
-			byte[] dataToEncrypt = new byte[SIZE_OF_CHALLENGE + SUBJECT_LEN]; 
-			
-			byte[] paddedDataToEncrypt = new byte[32];
 			
 			System.out.println("SIZE OF DATA TO ENCRYPT: " + dataToEncrypt.length);
 			Util.arrayCopy(challenge,(short) 0, dataToEncrypt,(short) 0, SIZE_OF_CHALLENGE);
 			Util.arrayCopy(subject,(short)0, dataToEncrypt, SIZE_OF_CHALLENGE, SUBJECT_LEN);
 
-			Util.arrayCopy(dataToEncrypt,(short) 0, paddedDataToEncrypt,(short) 0, (short)dataToEncrypt.length);
-			Util.arrayFillNonAtomic(paddedDataToEncrypt, (short)dataToEncrypt.length,(short) (paddedDataToEncrypt.length-dataToEncrypt.length), (byte) 0);
+			Util.arrayCopy(dataToEncrypt,(short) 0, paddedDataToEncrypt_1,(short) 0, (short)dataToEncrypt.length);
+			Util.arrayFillNonAtomic(paddedDataToEncrypt_1, (short)dataToEncrypt.length,(short) (paddedDataToEncrypt_1.length-dataToEncrypt.length), (byte) 0);
 
 			
-			byte[] encryptedChallenge = new byte[32];
-			System.out.println(paddedDataToEncrypt.length);
-		    cipher.doFinal(paddedDataToEncrypt, (short) 0, (short) paddedDataToEncrypt.length, encryptedChallenge, (short) 0);
+			System.out.println(paddedDataToEncrypt_1.length);
+		    cipher.doFinal(paddedDataToEncrypt_1, (short) 0, (short) paddedDataToEncrypt_1.length, encryptedChallenge, (short) 0);
 		    
 		    
 //			byte[] encryptedChallenge = aesenc.doFinal(dataToEncrypt);
-			response = new byte[4 + 4 + encryptedKey.length +  encryptedChallenge.length];
-			Util.arrayCopy(intToByte(encryptedKey.length), (short) 0, response, (short) 0, (short) 4);
+			Util.arrayCopy(intToByte(paddedEncryptedData.length), (short) 0, response, (short) 0, (short) 4);
 			Util.arrayCopy(intToByte(encryptedChallenge.length), (short) 0, response, (short) 4, (short) 4);
-			Util.arrayCopy(encryptedKey, (short) 0, response, (short) 8,(short) encryptedKey.length);
-			Util.arrayCopy(encryptedChallenge, (short) 0, response, (short) (encryptedKey.length +8),(short) encryptedChallenge.length);
+			Util.arrayCopy(paddedEncryptedData, (short) 0, response, (short) 8,(short) paddedEncryptedData.length);
+			Util.arrayCopy(encryptedChallenge, (short) 0, response, (short) (paddedEncryptedData.length +8),(short) encryptedChallenge.length);
 			System.out.println(encryptedChallenge.length);
 			System.out.println("END OF AUTH 1");
 			
@@ -572,8 +577,6 @@ public class IdentityCard extends Applet {
 //			System.out.println("InvalidKeySpecException");
 
 		}
-		System.out.println("RESPONSE LENGTH: "+response.length);
-		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(response));
 		apdu.setOutgoing();
 		apdu.setOutgoingLength((short)response.length);
 		apdu.sendBytesLong(response,(short)0,(short)response.length);    
@@ -687,9 +690,6 @@ public class IdentityCard extends Applet {
 	// step 4.5
 		else{
 			System.out.println("4.5");
-			System.out.println(authenticatedSPCertificate.length);
-			System.out.println(issuerBuffer.length);
-			System.out.println(subjectBuffer.length);
 			Util.arrayCopy(authenticatedSPCertificate, SHORTZERO, issuerBuffer, SHORTZERO, ISSUER_LEN);
 			Util.arrayCopy(authenticatedSPCertificate, ISSUER_LEN, subjectBuffer, SHORTZERO, SUBJECT_LEN);
 			
@@ -712,8 +712,6 @@ public class IdentityCard extends Applet {
 		// step 4.6
 			System.out.println("4.6");
 			byte requestAccepted = 0x01;
-			System.out.println(queryLen);
-			System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(bigStorage));
 			for (int i = 0; i < queryLen; i++) {
 				byte requestedData = bigStorage[i];
 				byte isRequestedDataAvailable = 0x00;
@@ -820,7 +818,6 @@ public class IdentityCard extends Applet {
 				apdu.setOutgoing();
 				apdu.setOutgoingLength((short)encryptedPaddedResponseToAttributesReleasing.length);
 				apdu.sendBytesLong(encryptedPaddedResponseToAttributesReleasing,SHORTZERO,(short)encryptedPaddedResponseToAttributesReleasing.length);
-				//TODO
 			}
 		}
 		
@@ -878,22 +875,14 @@ public class IdentityCard extends Applet {
 				
 			    javacardx.crypto.Cipher encryptCipher = javacardx.crypto.Cipher.getInstance(javacardx.crypto.Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
 			    encryptCipher.init(symKey, javacardx.crypto.Cipher.MODE_ENCRYPT, ivBytes, (short)0, (short)ivBytes.length);
-			    
-
-//			    System.out.println("Challenge: " + javax.xml.bind.DatatypeConverter.printHexBinary(challenge));
-				// data that needs to be encrypted
-				short sizeToAdd = (short) (16 - (certificateAndSignature.length%16));
-				byte[] paddedDataToEncrypt = new byte[certificateAndSignature.length + sizeToAdd];
-				
+			    				
 
 				Util.arrayCopy(certificateAndSignature,(short) 0, paddedDataToEncrypt,(short) 0, (short)certificateAndSignature.length);
 				Util.arrayFillNonAtomic(paddedDataToEncrypt, (short)certificateAndSignature.length,(short) (paddedDataToEncrypt.length-certificateAndSignature.length), (byte) 0);
 
 				
-				byte[] encryptedCertificateAndSignature = new byte[certificateAndSignature.length + sizeToAdd];
 				encryptCipher.doFinal(paddedDataToEncrypt, (short) 0, (short) paddedDataToEncrypt.length, encryptedCertificateAndSignature, (short) 0);
-				
-				byte[] keybytes = new byte[16];
+
 				symKey.getKey(keybytes, SHORTZERO);
 				
 	  // step 3.8
@@ -910,8 +899,7 @@ public class IdentityCard extends Applet {
 		byte[] buffer = apdu.getBuffer();
 		Util.arrayCopy(buffer, (short)ISO7816.OFFSET_CDATA, fourBytes, (short)0, (short)4);
 		short size = (short) bytesToInt(fourBytes, 0);
-		System.out.println(size);
-		byte[] encryptedResponse = new byte[size];
+		byte[] encryptedResponse = new byte[size];//TODO
 		Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA + 4), encryptedResponse,(short) 0, size);
 
         byte[] ivBytes = null;
@@ -924,7 +912,6 @@ public class IdentityCard extends Applet {
 
 	    cipher.init(symKey, javacardx.crypto.Cipher.MODE_DECRYPT, ivBytes, (short)0, (short)ivBytes.length);
 		
-		System.out.println("AUTH3");
 //		System.out.println(symetricKey.getEncoded());
 //		try {
 //			aesdec.init(Cipher.DECRYPT_MODE, symetricKey, iv);
@@ -933,7 +920,7 @@ public class IdentityCard extends Applet {
 //		} catch (InvalidAlgorithmParameterException e) {
 //			System.out.println("InvalidAlgorithmParameterException");
 //		}
-		byte[] response = new byte[size];
+		byte[] response = new byte[size];//TODO
 		
 		
 		Util.arrayCopy(encryptedResponse, (short) 0, aesEncryptBytes, (short) 0, (short)aesEncryptBytes.length);
