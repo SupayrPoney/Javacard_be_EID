@@ -94,6 +94,9 @@ public class IdentityCard extends Applet {
 	private static final short SIZE_OF_UNIQUE_KEY = 4;
 	private static final short SIZE_OF_CERT = ISSUER_LEN + SUBJECT_LEN + 2*DATE_LEN + EXPONENT_LEN + MODULUS_LEN + SIGN_LEN;
 	
+	private static final short SIZE_OF_DATE = 8;
+	private static final short SIZE_OF_INT = 4;
+	
 	
 	private final static byte PIN_TRY_LIMIT =(byte)0x03;
 	private final static byte PIN_SIZE =(byte)0x04;
@@ -109,8 +112,10 @@ public class IdentityCard extends Applet {
 	private final static short SW_WRONG_PIN = 0x6308;
 
 	private AESKey symKey = null;
+	private byte[] arrayOfOne = new byte[1];
 	private byte[] userUniqueKey = new byte[SIZE_OF_UNIQUE_KEY];
 	private byte[] emptyResponse = new byte[0];
+	private byte[] dateBuffer = new byte[SIZE_OF_DATE];
 	private byte[] pinBuffer = new byte[PIN_SIZE];
 	private byte[] issuerBuffer = new byte[ISSUER_LEN];
 	private byte[] dataFornym = new byte[SIZE_OF_UNIQUE_KEY + SUBJECT_LEN];
@@ -123,6 +128,16 @@ public class IdentityCard extends Applet {
 	private byte[] challenge = new byte[SIZE_OF_CHALLENGE];
 	private byte[] paddedChallenge = new byte[SIZE_OF_PADDED_CHALLENGE];
 	private byte[] concatChallengeAuth = new byte[SIZE_OF_CHALLENGE + SIZE_OF_AUTH];
+	
+
+	byte[] exponent = new byte[EXPONENT_LEN];
+	byte[] validFrom = new byte[DATE_LEN];
+	byte[] validUntil = new byte[DATE_LEN];
+	byte[] signature = new byte[SIGN_LEN];
+	byte[] issuer = new byte[ISSUER_LEN];
+	byte[] subject = new byte[SUBJECT_LEN];
+	byte[] modulus = new byte[MODULUS_LEN+1];
+	byte[] croppedModulus = new byte[MODULUS_LEN];
 	
 	private byte[] certificateAndSignature = new byte[SIGN_LEN + SIZE_OF_CERT];
 	
@@ -234,7 +249,6 @@ public class IdentityCard extends Applet {
 		donor = 1;
 		age = 53;
 
-		//TODO PICTURE
 		
 		/*
 		 * This method registers the applet with the JCRE on the card.
@@ -257,14 +271,6 @@ public class IdentityCard extends Applet {
 		short START = 0;
 		Util.arrayCopy(buffer, START, storage, START, (short)8);
 		short readCount = apdu.setIncomingAndReceive();
-//		short i = 0;
-//		while ( bytesLeft > 0){
-//			
-//			Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, storage, i, readCount);
-//			bytesLeft -= readCount;
-//			i+=readCount;
-//			readCount = apdu.receiveBytes(ISO7816.OFFSET_CDATA);
-//		}
 		
 		Util.arrayCopy(storage, (short)0x00, byteToInt,(short) 0x00, (short)4);
 		String year = Integer.toString(byteToInt[0] << 24 | (byteToInt[1] & 0xFF) << 16 | (byteToInt[2] & 0xFF) << 8 | (byteToInt[3] & 0xFF));
@@ -273,7 +279,7 @@ public class IdentityCard extends Applet {
 		String hour = Integer.toString((int)storage[6]);
 		String min = Integer.toString((int)storage[7]);
 		String currentTimeString = String.join("-", new String[]{year,month,day,hour, min});
-		
+		//TODO
 		String lastValidationString = String.join("-", lastValidationTime);
 		
 		
@@ -295,7 +301,6 @@ public class IdentityCard extends Applet {
 				
 			}
 		} catch (ParseException e) {
-			// TODO Auto-generated catch block
 		}
 	}
 	
@@ -318,13 +323,10 @@ public class IdentityCard extends Applet {
 		}
         int len = bigStorage[0] << 24 | (bigStorage[1] & 0xFF) << 16 | (bigStorage[2] & 0xFF) << 8 | (bigStorage[3] & 0xFF);
  
-        short sizeOfLen = 4;
-        short sizeOfTime = 8;
-        byte[] sigToVerify = new byte[len - sizeOfLen - sizeOfTime];
-        byte[] timeToVerify = new byte[8];
+        byte[] sigToVerify = new byte[len - SIZE_OF_INT - SIZE_OF_DATE];//TODO
         
-        Util.arrayCopy(bigStorage, (short) sizeOfLen, timeToVerify, (short) 0, (short)(sizeOfTime));
-        Util.arrayCopy(bigStorage, (short) (sizeOfLen + sizeOfTime), sigToVerify, (short) 0, (short)(len - sizeOfLen - sizeOfTime));
+        Util.arrayCopy(bigStorage, (short) SIZE_OF_INT, dateBuffer, (short) 0, (short)(SIZE_OF_DATE));
+        Util.arrayCopy(bigStorage, (short) (SIZE_OF_INT + SIZE_OF_DATE), sigToVerify, (short) 0, (short)(len - SIZE_OF_INT - SIZE_OF_DATE));
 
 		javacard.security.RSAPublicKey timestampPubKey = (javacard.security.RSAPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_512, false);
 
@@ -337,23 +339,22 @@ public class IdentityCard extends Applet {
 		
 		javacard.security.MessageDigest md = javacard.security.MessageDigest.getInstance(javacard.security.MessageDigest.ALG_SHA_256, false);
 		md.reset();
-		md.doFinal(timeToVerify, (short) 0,(short)timeToVerify.length, hashedArray, (short) 0);
+		md.doFinal(dateBuffer, (short) 0,(short)dateBuffer.length, hashedArray, (short) 0);
 		boolean verifies = signEngine.verify(hashedArray, (short) 0, (short) hashedArray.length, sigToVerify, (short) 0, (short)sigToVerify.length);
 		if (! verifies){
 			ISOException.throwIt(SW_TIME_SIGNATURE_VERIFICATION_FAILED);
 		}
 		
-		String year = Integer.toString(timeToVerify[0] << 24 | (timeToVerify[1] & 0xFF) << 16 | (timeToVerify[2] & 0xFF) << 8 | (timeToVerify[3] & 0xFF));
-		String month = Integer.toString((int)(timeToVerify[4]& 0xFF));
-		String day = Integer.toString((int)(timeToVerify[5]& 0xFF));
-		String hour = Integer.toString((int)(timeToVerify[6]& 0xFF));
-		String min = Integer.toString((int)(timeToVerify[7]& 0xFF));
+		String year = Integer.toString(dateBuffer[0] << 24 | (dateBuffer[1] & 0xFF) << 16 | (dateBuffer[2] & 0xFF) << 8 | (dateBuffer[3] & 0xFF));
+		String month = Integer.toString((int)(dateBuffer[4]& 0xFF));
+		String day = Integer.toString((int)(dateBuffer[5]& 0xFF));
+		String hour = Integer.toString((int)(dateBuffer[6]& 0xFF));
+		String min = Integer.toString((int)(dateBuffer[7]& 0xFF));
 		String timeString = String.join("-", new String[]{year,month,day,hour, min});
-		
+		//TODO
 		String lastValidationString = String.join("-", lastValidationTime);
 
 		try {
-			SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd-HH-mm");
 			Date timeDate = format.parse(timeString);
 			Date lastValidationDate = format.parse(lastValidationString);
 			short response = 1;
@@ -363,9 +364,10 @@ public class IdentityCard extends Applet {
 			else{
 				lastValidationTime = new String[]{year,month,day,hour, min};
 			}
+			arrayOfOne[0] = (byte) response;
 			apdu.setOutgoing();
-			apdu.setOutgoingLength((short)1);
-			apdu.sendBytesLong(new byte[]{(byte)response},(short)0,(short)1);
+			apdu.setOutgoingLength((short)arrayOfOne.length);
+			apdu.sendBytesLong(arrayOfOne,(short)0,(short)arrayOfOne.length);
 		} catch (ParseException e) {
 		}
 
@@ -422,22 +424,13 @@ public class IdentityCard extends Applet {
 		}
 		
 		byte[] response = null;
-		byte[] issuer = new byte[ISSUER_LEN];
-		byte[] subject = new byte[SUBJECT_LEN];
-		byte[] modulus = new byte[MODULUS_LEN+1];
 		modulus[0] = 0;
-		byte[] exponent = new byte[EXPONENT_LEN];
-		byte[] validFrom = new byte[DATE_LEN];
-		byte[] validUntil = new byte[DATE_LEN];
-		byte[] signature = new byte[SIGN_LEN];
 
 		//Store for later
 		Util.arrayCopy(bigStorage, SHORTZERO, authenticatedSPCertificate, SHORTZERO, (short) authenticatedSPCertificate.length);
 		
 		Util.arrayCopy(bigStorage, (short) 0x00, issuer,(short) 0x00, ISSUER_LEN);
 		Util.arrayCopy(bigStorage, (short) ISSUER_LEN, subject,(short) 0x00, SUBJECT_LEN);
-		System.out.println(new String(issuer));
-		System.out.println(new String(subject));
 		Util.arrayCopy(bigStorage, (short) (SUBJECT_LEN + ISSUER_LEN), modulus,(short) 0x01, MODULUS_LEN);
 		Util.arrayCopy(bigStorage, (short) (SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN), exponent,(short) 0x00, EXPONENT_LEN);
 		Util.arrayCopy(bigStorage, (short) (SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN + EXPONENT_LEN), validFrom,(short) 0x00, DATE_LEN);
@@ -453,7 +446,6 @@ public class IdentityCard extends Applet {
 		boolean verified = false;
 		boolean valid = false;
 		javacard.security.RSAPublicKey mainCaPublicKey = null;
-		System.out.println("BEFORE TRY");
 		try {
 			
 
@@ -495,7 +487,6 @@ public class IdentityCard extends Applet {
 		}
 		System.out.println("HERE");
 		//otherwise we generate a new symmetric key
-		 KeyGenerator kgen;
 		 AESKey key = null;
 		 javacard.security.RandomData randomizer = RandomData.getInstance(RandomData.ALG_PSEUDO_RANDOM);
 		try {
@@ -516,7 +507,6 @@ public class IdentityCard extends Applet {
 			javacard.security.RSAPublicKey spPublicKey = (javacard.security.RSAPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_512, false);
 			spPublicKey.setExponent(exponent, (short) 0, (short) exponent.length);
 			//Modulus only needs to be 64 bytes
-			byte[] croppedModulus = new byte[modulus.length-1];
 			Util.arrayCopy(modulus, (short) 1, croppedModulus,(short)  0,(short)  (croppedModulus.length));
 			spPublicKey.setModulus(croppedModulus, (short) 0, (short) croppedModulus.length);
 			rsaenc.init(spPublicKey, javacardx.crypto.Cipher.MODE_ENCRYPT);
