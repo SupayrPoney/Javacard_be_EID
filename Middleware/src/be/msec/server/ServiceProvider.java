@@ -41,7 +41,12 @@ import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+import javax.swing.JFrame;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JTextArea;
 import javax.swing.SwingWorker;
+
 
 
 
@@ -57,16 +62,26 @@ public class ServiceProvider {
 
 	private static final short EXPONENT_LEN = 3; 
 	private static final short MODULUS_LEN = 64; 
+	
+	private byte[] nym = new byte[32];
+	private byte[] name = new byte[32];
+	private byte[] address = new byte[48];
+	private byte[] country = new byte[2];
+	private byte[] birthDate = new byte[6];
+	private byte donor;
+	private byte age;
+	private byte gender;
+	byte[] picture = new byte[]{0x30, 0x35, 0x37, 0x36, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04};
 
-	private byte NYM_INDEX = 0;
-	private byte NAME_INDEX = 1;
-	private byte ADDRESS_INDEX = 2;
-	private byte COUNTRY_INDEX = 3;
-	private byte BIRTHDATE_INDEX = 4;
-	private byte DONOR_INDEX = 5;
-	private byte AGE_INDEX = 6;
-	private byte GENDER_INDEX = 7;
-	private byte PICTURE_INDEX = 8;
+	private final byte NYM_INDEX = 0;
+	private final byte NAME_INDEX = 1;
+	private final byte ADDRESS_INDEX = 2;
+	private final byte COUNTRY_INDEX = 3;
+	private final byte BIRTHDATE_INDEX = 4;
+	private final byte DONOR_INDEX = 5;
+	private final byte AGE_INDEX = 6;
+	private final byte GENDER_INDEX = 7;
+	private final byte PICTURE_INDEX = 8;
 	
 	
 	private byte[] authText = {65,117,116,104};
@@ -461,7 +476,6 @@ public class ServiceProvider {
 			byte[] concatChallengeAuth = new byte[SIZE_OF_CHALLENGE + SIZE_OF_AUTH];
 			System.arraycopy(challenge, (short) 0, concatChallengeAuth, (short) 0, SIZE_OF_CHALLENGE);
 			System.arraycopy(authText, (short) 0, concatChallengeAuth, SIZE_OF_CHALLENGE, SIZE_OF_AUTH);
-			///TODO
 			System.out.println("BEFORE HASHING: " + javax.xml.bind.DatatypeConverter.printHexBinary(concatChallengeAuth));
 			MessageDigest md = null;
 			try {
@@ -502,27 +516,166 @@ public class ServiceProvider {
 		//System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(certAndSignPadded));
 		
 	}
+	
 
 	public void step4(){
 
 		Socket clientSocketSP;
 		DataOutputStream outToClient = null;
+		DataInputStream inFromClient  = null;
+		byte[] query = {NYM_INDEX, NAME_INDEX, ADDRESS_INDEX, COUNTRY_INDEX, BIRTHDATE_INDEX, AGE_INDEX, GENDER_INDEX};
 		try {
 			clientSocketSP = new Socket("localhost", 9988);
 			outToClient = new DataOutputStream(clientSocketSP.getOutputStream());
-			DataInputStream inFromClient = new DataInputStream(clientSocketSP.getInputStream());
-			byte[] query = {NYM_INDEX, NAME_INDEX, ADDRESS_INDEX, COUNTRY_INDEX, BIRTHDATE_INDEX, AGE_INDEX, GENDER_INDEX};
+			inFromClient = new DataInputStream(clientSocketSP.getInputStream());
 			byte[] queryWithLen = new byte[1 + query.length];
 			queryWithLen[0] = (byte) query.length;
 			System.arraycopy(query, 0, queryWithLen, 1, query.length);
 			outToClient.write(queryWithLen);
 		} catch (UnknownHostException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
+		
+	// step 4.10
+		byte[] queryResponse = null;
+		try {
+			byte[] length = new byte[4];
+			length[0] = (byte) inFromClient.read();
+			length[1] = (byte) inFromClient.read();
+			length[2] = (byte) inFromClient.read();
+			length[3] = (byte) inFromClient.read();
+			int len = bytesToInt(length, 0);
+			System.out.println(len);
+			queryResponse = new byte[len];
+			inFromClient.readFully(queryResponse);
+			System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(queryResponse));
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+
+		Cipher aesdecCipher = null;
+		byte[] paddedQueryResult = null;
+		try {
+			aesdecCipher = Cipher.getInstance("AES/CBC/NOPADDING");
+			IvParameterSpec iv = new IvParameterSpec("0000111122223333".getBytes("UTF-8"));
+			aesdecCipher.init(Cipher.DECRYPT_MODE, symmetricKey, iv);
+			paddedQueryResult = aesdecCipher.doFinal(queryResponse);
+		} catch (NoSuchAlgorithmException e) {
+			e.printStackTrace();
+		} catch (NoSuchPaddingException e) {
+			e.printStackTrace();
+		} catch (InvalidKeyException e) {
+			e.printStackTrace();
+		} catch (InvalidAlgorithmParameterException e) {
+			e.printStackTrace();
+		} catch (IllegalBlockSizeException e) {
+			e.printStackTrace();
+		} catch (BadPaddingException e) {
+			e.printStackTrace();
+		} catch (UnsupportedEncodingException e) {
+			e.printStackTrace();
+		}
+		String display = "";
+		int offset = 0;
+		for (int i = 0; i < query.length; i++) {
+			byte requestedData = query[i];
+			display += "\n";
+			switch (requestedData) {
+		// step 4.9
+			case NYM_INDEX:
+				System.arraycopy(paddedQueryResult, offset, nym, 0, (short) nym.length);
+				display += ("NYM: " + javax.xml.bind.DatatypeConverter.printHexBinary(nym));
+				offset += nym.length;
+				break;
+			case NAME_INDEX:
+				System.arraycopy(paddedQueryResult, offset, name, 0, (short) name.length);
+				display += ("NAME: " + new String(name));
+				offset += name.length;
+				
+				break;
+			case ADDRESS_INDEX:
+				System.arraycopy(paddedQueryResult, offset, address, 0, (short) address.length);
+				display += ("ADDRESS: " + new String(address));
+				offset += address.length;
+				
+				break;
+			case COUNTRY_INDEX:
+				System.arraycopy(paddedQueryResult, offset, country, 0, (short) country.length);
+				display += ("COUNTRY: " + new String(country));
+				offset += country.length;
+				
+				break;
+			case BIRTHDATE_INDEX:
+				System.arraycopy(paddedQueryResult, offset, birthDate, 0, (short) birthDate.length);
+				int year = bytesToInt(birthDate, 0);
+				int month = birthDate[4];
+				int day = birthDate[5];
+				display += ("BIRTH DATE: " + day + "/" + month +"/" + year);
+				
+				offset += birthDate.length;
+				
+				break;
+			case DONOR_INDEX:
+				donor = paddedQueryResult[offset];
+				display += ("DONOR: " + donor);
+				offset += 1;
+				break;
+			case AGE_INDEX:
+				age = paddedQueryResult[offset];
+				display += ("AGE: " + age);
+				offset += 1;
+				
+				break;
+			case GENDER_INDEX:
+				gender = paddedQueryResult[offset];
+				display += ("GENDER: " + gender);
+				offset += 1;
+				
+				break;
+			case PICTURE_INDEX:
+				System.arraycopy(paddedQueryResult, offset, picture, 0, (short) picture.length);
+				offset += picture.length;
+				
+				break;
+
+			default:
+				System.out.println("ARGUMENT NON AVAILABLE");
+				break;
+			}
+			
+			JFrame frame = new JFrame("JOptionPane showMessageDialog example");
+//	        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+	        final JPanel panel = new JPanel();
+	        JTextArea textArea = new JTextArea(
+	                display, 
+	                6, 
+	                20);
+	        textArea.setLineWrap(true);
+	        textArea.setWrapStyleWord(true);
+	        textArea.setOpaque(false);
+	        textArea.setEditable(false);
+
+	        panel.add(textArea);
+	        frame.add(panel);
+	        frame.pack();
+	        frame.setVisible(true);
+//		    System.exit(0);
+		}
+//		System.arraycopy(paddedQueryResult, 0, nym, 0, nym.length);
+//		System.arraycopy(paddedQueryResult, nym.length, name, 0, name.length);
+//		System.arraycopy(paddedQueryResult, name.length, address, 0, address.length);
+//		System.arraycopy(paddedQueryResult, address.length, country, 0, country.length);
+//		System.arraycopy(paddedQueryResult, country.length, birthDate, 0, birthDate.length);
+//		donor = paddedQueryResult[birthDate.length];
+//		age = paddedQueryResult[birthDate.length+1];
+//		gender = paddedQueryResult[birthDate.length+2];
+//		System.arraycopy(paddedQueryResult, birthDate.length+3, picture, 0, picture.length);
+		
+
+		//TODO
 		
 		
 	}

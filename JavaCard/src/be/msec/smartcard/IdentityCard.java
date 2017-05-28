@@ -172,6 +172,8 @@ public class IdentityCard extends Applet {
 	byte[] picture = new byte[]{0x30, 0x35, 0x37, 0x36, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04};
 // max size byte array to release attributes
 	private byte[] responseToAttributesReleasing = new byte[32 + 32 + 48 + 2 + 6 + 1 + 1 + 1 + 16];
+	private byte[] paddedResponseToAttributesReleasing = new byte[32 + 32 + 48 + 2 + 6 + 1 + 1 + 1 + 16 + 5];//Multiple of 16 for encryption
+	private byte[] encryptedPaddedResponseToAttributesReleasing = new byte[32 + 32 + 48 + 2 + 6 + 1 + 1 + 1 + 16 + 5];//Multiple of 16 for encryption result
 	
 	private final byte NYM_INDEX = 0;
 	private final byte NAME_INDEX = 1;
@@ -212,6 +214,7 @@ public class IdentityCard extends Applet {
 		try {
 			//only pseudo_random available on the card
 			randomizer.generateData(userUniqueKey, (short) 0, (short) userUniqueKey.length);
+			System.out.println("RANDOM USER UNIQUE KEY:\n" + javax.xml.bind.DatatypeConverter.printHexBinary(userUniqueKey));
 		}
 		catch( Exception e){
 			
@@ -561,9 +564,7 @@ public class IdentityCard extends Applet {
 			
 			byte[] encryptedChallenge = new byte[32];
 			System.out.println(paddedDataToEncrypt.length);
-		    System.out.println("BEFORE DOFINAL");
 		    cipher.doFinal(paddedDataToEncrypt, (short) 0, (short) paddedDataToEncrypt.length, encryptedChallenge, (short) 0);
-		    System.out.println("AFTER DOFINAL");
 		    
 		    
 //			byte[] encryptedChallenge = aesenc.doFinal(dataToEncrypt);
@@ -746,21 +747,23 @@ public class IdentityCard extends Applet {
 					ISOException.throwIt(SW_WRONG_REQUEST);
 				}
 			}
-			if (requestAccepted == 0x01) {
-		// step 4.7
-				System.out.println("4.7");
-				Util.arrayCopy(userUniqueKey, SHORTZERO, dataFornym, SHORTZERO, SIZE_OF_UNIQUE_KEY);
-				Util.arrayCopy(subjectBuffer, SHORTZERO, dataFornym, SIZE_OF_UNIQUE_KEY, SUBJECT_LEN);
-
-				javacard.security.MessageDigest md = javacard.security.MessageDigest.getInstance(javacard.security.MessageDigest.ALG_SHA_256, false);
-				md.reset();
-				System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(subjectBuffer));
-								
-				System.out.println("BEFORE HASHING: " + javax.xml.bind.DatatypeConverter.printHexBinary(dataFornym));
-				
-				md.doFinal(dataFornym, (short) 0,(short)dataFornym.length, nym, (short) 0);
+			if (requestAccepted != 0x01) {
+				ISOException.throwIt(SW_WRONG_REQUEST);
 				
 			}
+		// step 4.7
+			System.out.println("4.7");
+			Util.arrayCopy(userUniqueKey, SHORTZERO, dataFornym, SHORTZERO, SIZE_OF_UNIQUE_KEY);
+			Util.arrayCopy(subjectBuffer, SHORTZERO, dataFornym, SIZE_OF_UNIQUE_KEY, SUBJECT_LEN);
+
+			javacard.security.MessageDigest md = javacard.security.MessageDigest.getInstance(javacard.security.MessageDigest.ALG_SHA_256, false);
+			md.reset();
+			System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(subjectBuffer));
+							
+			System.out.println("BEFORE HASHING: " + javax.xml.bind.DatatypeConverter.printHexBinary(dataFornym));
+			
+			md.doFinal(dataFornym, (short) 0,(short)dataFornym.length, nym, (short) 0);
+				
 		// step 4.8
 			//responseToAttributesReleasing
 			short offset = 0;
@@ -819,7 +822,28 @@ public class IdentityCard extends Applet {
 				
 			}
 			System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(responseToAttributesReleasing));
-			
+		// step 4.10
+
+			byte[] ivBytes = null;
+			try {
+				ivBytes = "0000111122223333".getBytes("UTF-8");
+			} catch (UnsupportedEncodingException e) {
+			}
+		    javacardx.crypto.Cipher cipher = javacardx.crypto.Cipher.getInstance(javacardx.crypto.Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
+		    cipher.init(symKey, javacardx.crypto.Cipher.MODE_ENCRYPT, ivBytes, (short)0, (short)ivBytes.length);
+		    
+
+//		    System.out.println("Challenge: " + javax.xml.bind.DatatypeConverter.printHexBinary(challenge));
+
+
+			Util.arrayCopy(responseToAttributesReleasing, SHORTZERO, paddedResponseToAttributesReleasing, SHORTZERO,(short) responseToAttributesReleasing.length);
+		    System.out.println("BEFORE DOFINAL");
+		    cipher.doFinal(paddedResponseToAttributesReleasing, (short) 0, (short) paddedResponseToAttributesReleasing.length, encryptedPaddedResponseToAttributesReleasing, (short) 0);
+		    System.out.println("AFTER DOFINAL");
+		    System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(encryptedPaddedResponseToAttributesReleasing));
+			apdu.setOutgoing();
+			apdu.setOutgoingLength((short)encryptedPaddedResponseToAttributesReleasing.length);
+			apdu.sendBytesLong(encryptedPaddedResponseToAttributesReleasing,SHORTZERO,(short)encryptedPaddedResponseToAttributesReleasing.length);
 			//TODO
 		}
 		

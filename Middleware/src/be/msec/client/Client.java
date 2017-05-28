@@ -72,6 +72,8 @@ public class Client {
 	private final static short SIZE_OF_INT_IN_BYTES = 4;
 	private static IConnection connectionWithJavacard;
 
+	
+
 
 
 	private static void authenticate(CommandAPDU a, ResponseAPDU r, IConnection c) throws Exception{
@@ -264,13 +266,32 @@ public class Client {
 		
 		
 		CommandAPDU a = new CommandAPDU(IDENTITY_CARD_CLA, QUERY_ATTRIBUTES, 0x00, 0x00, queryForCard);
-
+		ResponseAPDU r = null;
 		try {
-			ResponseAPDU r = connectionWithJavacard.transmit(a);
+			r = connectionWithJavacard.transmit(a);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-		
+	//4.10
+		if (r.getSW() == 0x9000) {
+			byte[] response = Arrays.copyOfRange(r.getData(),(short) (6+ queryForCard.length), r.getData().length);
+		    System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(response));
+		    int responseLen = response.length;
+		    byte[] toSendToServer = new byte[responseLen + 4];
+		    System.arraycopy(intToBytes(responseLen), 0, toSendToServer, 0, 4);
+		    System.out.println("responseLen: " + responseLen);
+		    System.out.println("toSendToServer.length: " + toSendToServer.length);
+		    System.out.println("response.length: " + response.length);
+		    System.arraycopy(response, 0, toSendToServer, 4, responseLen);
+		    
+		    try {
+				outToServer.write(toSendToServer);
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			
+		}
 		
 	}
 	private static ResponseAPDU end_of_auth(byte[] message, CommandAPDU a, ResponseAPDU r, IConnection c) {
@@ -326,7 +347,7 @@ public class Client {
 		r = c.transmit(a);
 		if(r.getSW() == 0x9000){
 			System.out.println(r);
-			byte[] response = Arrays.copyOfRange(r.getData(),(short) 7, r.getData().length);
+			byte[] response = Arrays.copyOfRange(r.getData(),(short) (6 + 1), r.getData().length);
 			return response;
 		}
 		else{
