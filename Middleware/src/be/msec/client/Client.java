@@ -417,16 +417,9 @@ public class Client {
 
 	private static boolean validate_Time(CommandAPDU a, ResponseAPDU r, IConnection c) throws Exception {
 		int dataLen = 8;
-		Date currentTime = new Date();
-		LocalDateTime currentTimeDate = currentTime.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime();
-		byte[] yearBytes = ByteBuffer.allocate(4).putInt(currentTimeDate.getYear()).array();
-		byte[] dateBytes = new byte[8];
-		System.arraycopy(yearBytes, 0, dateBytes, 0, 4);
-		dateBytes[4] = (byte) currentTimeDate.getMonthValue();
-		dateBytes[5] = (byte) currentTimeDate.getDayOfMonth();
-		dateBytes[6] = (byte) currentTimeDate.getHour();
-		dateBytes[7] = (byte) currentTimeDate.getMinute();
-		a = new CommandAPDU(IDENTITY_CARD_CLA, VALIDATE_TIME, 0x00, 0x00,dateBytes);
+		long currentTimeInMillis = System.currentTimeMillis();
+		byte[] currentTimeInMillisBytes = ByteBuffer.allocate(8).putLong(currentTimeInMillis).array();
+		a = new CommandAPDU(IDENTITY_CARD_CLA, VALIDATE_TIME, 0x00, 0x00,currentTimeInMillisBytes);
 		byte[] dataIn = Arrays.copyOfRange(a.getBytes(), 0x05, 5 + 100); 
 		r = c.transmit(a);
 		System.out.println(r);

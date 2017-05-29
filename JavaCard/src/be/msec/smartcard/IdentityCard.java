@@ -1,11 +1,6 @@
 package be.msec.smartcard;
 
-import java.io.UnsupportedEncodingException;
-import java.nio.ByteBuffer;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.util.Arrays;
-import java.util.Date;
+//import java.nio.ByteBuffer;
 
 import javacard.framework.APDU;
 import javacard.framework.Applet;
@@ -84,6 +79,7 @@ public class IdentityCard extends Applet {
 	private byte[] userUniqueKey = new byte[SIZE_OF_UNIQUE_KEY];
 	private byte[] emptyResponse = new byte[0];
 	private byte[] dateBuffer = new byte[SIZE_OF_DATE];
+	private byte[] diffDateBuffer = new byte[SIZE_OF_DATE];
 	private byte[] pinBuffer = new byte[PIN_SIZE];
 	private byte[] issuerBuffer = new byte[ISSUER_LEN];
 	private byte[] dataFornym = new byte[SIZE_OF_UNIQUE_KEY + SUBJECT_LEN];
@@ -146,16 +142,17 @@ public class IdentityCard extends Applet {
 	private byte[] SOCNET_BYTES =  {115,111,99,110,101,116,0,0,0,0,0,0,0,0,0,0};
 	private byte[] DEFAULT_BYTES = {100,101,102,97,117,108,116,0,0,0,0,0,0,0,0,0};
 	
+	private byte[] ivBytes = {48,48,48,48,49,49,49,49,50,50,50,50,51,51,51,51};
 	
-	private String[] lastValidationTime = {"2014","05","01","15","06"};
 	
-	private String[] deltaValidation = {"0","0","1","0","0"};
+	private byte[] lastValidationTimeBytes = {0,0,1,69,-73,-28,62,-64};
+	private byte[] millisInADay = {0,0,0,0,5,38,92,0};
 	
 	
 	private OwnerPIN pin;
 	private byte[] storage = new byte[]{0x30, 0x35, 0x37, 0x36, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04};
 	private byte[] bigStorage = new byte[1024];
-	private byte[] byteToInt = new byte[]{0x00,0x00,0x00,0x00, 0x04, 0x04};
+	private byte[] intInBytes = new byte[]{0x00,0x00,0x00,0x00};
 	private byte[] fourBytes = new byte[4];
 	
 	private short authStep = 0;
@@ -183,8 +180,6 @@ public class IdentityCard extends Applet {
 	private final byte AGE_INDEX = 6;
 	private final byte GENDER_INDEX = 7;
 	private final byte PICTURE_INDEX = 8;
-
-	SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd-HH-mm");
 
 	private byte[] canEgovAccess = {NYM_INDEX, NAME_INDEX, ADDRESS_INDEX, COUNTRY_INDEX, BIRTHDATE_INDEX, AGE_INDEX, GENDER_INDEX};
 	private byte[] canSocNetAccess = {NYM_INDEX, NAME_INDEX, COUNTRY_INDEX, AGE_INDEX, GENDER_INDEX, PICTURE_INDEX};
@@ -219,7 +214,7 @@ public class IdentityCard extends Applet {
 		catch( Exception e){
 			
 		}
-		byte[] yearBytes = ByteBuffer.allocate(4).putInt(1965).array();
+		byte[] yearBytes = {0,0,7,-83};
 		byte[] timeBytes = new byte[6];
 		System.arraycopy(yearBytes, 0, timeBytes, 0, 4);
 		timeBytes[4] = 4;
@@ -246,44 +241,100 @@ public class IdentityCard extends Applet {
 			throws ISOException {
 		new IdentityCard();
 	}
+    /**
+    * Subtract two unsigned integers represented in array A and B. The sum stored in
+    * array C
+    * From https://stackoverflow.com/questions/36518553/javacard-applet-to-subtract-two-hexadecimal-array-of-byte
+    * @param A the left operand
+    * @param AOff the starting position in array A.
+    * @param B the right operand.
+    * @param BOff the starting position in array B.
+    * @param C the result of (A-B)
+    * @param COff the starting position in array C.
+    * @param len the number of bytes in the operands as well in the computed
+    * result. this parameter can not be a negative number.
+    * @return false if the result underflows. if underflows occurs, the sum would
+    * be the mathematical result of A + ~B + 1.
+    * @throws ArrayOuutOfBoundException if  array access out of bound.
+    */
+   public static boolean substract(byte[] A, byte AOff, byte[] B, byte BOff, byte[] C, byte COff, byte len) {
+       byte borrow = 0;
+       short result;
+
+       for (len = (byte) (len - 1); len >= 0; len--) {
+           // subtract one unsigned byte from the other.
+           // also subtract the borrow from the previous byte computation.
+           result = (short) (getUnsignedByte(A, AOff, len) - getUnsignedByte(B, BOff, len) - borrow);
+           // need to borrow?
+           if (result < 0) {
+               borrow = 1;
+               result = (short) (result + 0x100);
+           } else {
+               borrow = 0;
+           }
+           // store the result in C
+           C[(byte) (len + COff)] = (byte) result;
+       }
+       // is the result underflow?
+       if (borrow == 1) {
+           return false;
+       }
+       return true;
+
+   }
+   
+   private static byte arrayCompare(byte[] A, short AOff, byte[] B, short BOff, short len){
+	   if (A.length == B.length){
+		   for (int i = 0; i < len; i++) {
+			   System.out.println(A[i] + " byte compared to " + B[i]);
+			   short Abyte = (short) (A[i] & 0xFF);
+			   short Bbyte = (short) (B[i] & 0xFF);
+			   System.out.println(Abyte + " compared to " + Bbyte);
+			   if (Abyte>Bbyte) {
+				   return 1;
+			   } else if (Bbyte>Abyte){
+				   return -1;
+			   }
+		   }
+		   return 0;
+	   }else{
+		   return 2;
+	   }
+   }
+   
+   private static short getUnsignedByte(byte[] A, byte AOff, byte count) {
+       return (short) (A[(short) (count + AOff)] & 0x00FF);
+   }
 	
 	private void validate_time(APDU apdu){
 		System.out.println("Validate");
 		byte[] buffer = apdu.getBuffer();
 		short bytesLeft = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
 		short START = 0;
-		Util.arrayCopy(buffer, START, storage, START, (short)8);
+		Util.arrayCopy(buffer, START, dateBuffer, START, (short)8);
 		short readCount = apdu.setIncomingAndReceive();
 		
-		Util.arrayCopy(storage, (short)0x00, byteToInt,(short) 0x00, (short)4);
-		String year = Integer.toString(byteToInt[0] << 24 | (byteToInt[1] & 0xFF) << 16 | (byteToInt[2] & 0xFF) << 8 | (byteToInt[3] & 0xFF));
-		String month = Integer.toString((int)storage[4]);
-		String day = Integer.toString((int)storage[5]);
-		String hour = Integer.toString((int)storage[6]);
-		String min = Integer.toString((int)storage[7]);
-		String currentTimeString = String.join("-", new String[]{year,month,day,hour, min});
-		//TODO
-		String lastValidationString = String.join("-", lastValidationTime);
+		substract(dateBuffer, (byte) 0,lastValidationTimeBytes, (byte) 0, diffDateBuffer, (byte) 0, (byte) SIZE_OF_DATE);
+		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(diffDateBuffer));
+		System.out.println(javax.xml.bind.DatatypeConverter.printHexBinary(millisInADay));
+		byte[] zero = {(byte)0x00};
+		byte[] one = {(byte)0x01};
+		System.out.println(arrayCompare(one, SHORTZERO, zero, SHORTZERO, (short)1));
 		
-		
-		try {
-			Date currentDate = format.parse(currentTimeString);
-			Date lastValidationDate = format.parse(lastValidationString);
-			if((currentDate.getTime() - lastValidationDate.getTime())/(1000*60*60*24) > 1){
-				apdu.setOutgoing();
-				apdu.setOutgoingLength((short)1);
-				Util.setShort(buffer,(short) 0, (short) 1);
-				apdu.sendBytes((short) 0x00,(short)1);
-				
-			}
-			else {
-				apdu.setOutgoing();
-				apdu.setOutgoingLength((short)1);
-				Util.setShort(buffer,(short) 0, (short) 1);
-				apdu.sendBytes((short) 0x00,(short)0);
-				
-			}
-		} catch (ParseException e) {
+		if(arrayCompare(diffDateBuffer, SHORTZERO, millisInADay, SHORTZERO, SIZE_OF_DATE) == 1){
+			System.out.println("NEEDS REFRESH");
+			apdu.setOutgoing();
+			apdu.setOutgoingLength((short)1);
+			Util.setShort(buffer,(short) 0, (short) 1);
+			apdu.sendBytes((short) 0x00,(short)1);
+			
+		}
+		else {
+			apdu.setOutgoing();
+			apdu.setOutgoingLength((short)1);
+			Util.setShort(buffer,(short) 0, (short) 1);
+			apdu.sendBytes((short) 0x00,(short)0);
+			
 		}
 	}
 	
@@ -326,32 +377,20 @@ public class IdentityCard extends Applet {
 			ISOException.throwIt(SW_TIME_SIGNATURE_VERIFICATION_FAILED);
 		}
 		
-		String year = Integer.toString(dateBuffer[0] << 24 | (dateBuffer[1] & 0xFF) << 16 | (dateBuffer[2] & 0xFF) << 8 | (dateBuffer[3] & 0xFF));
-		String month = Integer.toString((int)(dateBuffer[4]& 0xFF));
-		String day = Integer.toString((int)(dateBuffer[5]& 0xFF));
-		String hour = Integer.toString((int)(dateBuffer[6]& 0xFF));
-		String min = Integer.toString((int)(dateBuffer[7]& 0xFF));
-		String timeString = String.join("-", new String[]{year,month,day,hour, min});
-		//TODO
-		String lastValidationString = String.join("-", lastValidationTime);
 
-		try {
-			Date timeDate = format.parse(timeString);
-			Date lastValidationDate = format.parse(lastValidationString);
-			short response = 1;
-			if(!verifies || !(timeDate.getTime() > lastValidationDate.getTime())){
-				response = 0;
-			}
-			else{
-				lastValidationTime = new String[]{year,month,day,hour, min};
-				//TODO
-			}
-			arrayOfOne[0] = (byte) response;
-			apdu.setOutgoing();
-			apdu.setOutgoingLength((short)arrayOfOne.length);
-			apdu.sendBytesLong(arrayOfOne,(short)0,(short)arrayOfOne.length);
-		} catch (ParseException e) {
+		short response = 1;	
+		System.out.println("COMPARISON: "+arrayCompare(dateBuffer, SHORTZERO,lastValidationTimeBytes, SHORTZERO, SIZE_OF_DATE));
+		if(!verifies || !(arrayCompare(dateBuffer, SHORTZERO,lastValidationTimeBytes, SHORTZERO, SIZE_OF_DATE) == 1)){ //timeDate.getTime() > lastValidationDate.getTime())){
+			response = 0;
 		}
+		else{
+			lastValidationTimeBytes = dateBuffer;
+		}
+		System.out.println(response);
+		arrayOfOne[0] = (byte) response;
+		apdu.setOutgoing();
+		apdu.setOutgoingLength((short)arrayOfOne.length);
+		apdu.sendBytesLong(arrayOfOne,(short)0,(short)arrayOfOne.length);
 
 
 		
@@ -360,7 +399,7 @@ public class IdentityCard extends Applet {
 	
 	private void auth_step(APDU apdu) {
 		if (authStep == 0) {
-			Arrays.fill(bigStorage, (byte) 0);
+			Util.arrayFillNonAtomic(bigStorage, SHORTZERO, (short) bigStorage.length, (byte) 0);
 		}
 		byte[] buffer = apdu.getBuffer();
 		short bytesLeft = (short) (buffer[ISO7816.OFFSET_LC] & 0x00FF);
@@ -383,8 +422,12 @@ public class IdentityCard extends Applet {
 		apdu.sendBytesLong(buffer,(short)0,(short)buffer.length);    
 		
 	}
-	private byte[] intToByte(int integer){
-		return ByteBuffer.allocate(4).putInt(integer).array();
+	private byte[] intToByte(int value){
+	    intInBytes[0] = (byte)(value >>> 24);
+	    intInBytes[1] = (byte)(value >>> 16);
+	    intInBytes[2] = (byte)(value >>> 8);
+	    intInBytes[3] = (byte)value;
+	    return intInBytes;
 	}
 	
 	
@@ -418,48 +461,28 @@ public class IdentityCard extends Applet {
 		Util.arrayCopy(bigStorage, (short) (SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN + EXPONENT_LEN + DATE_LEN), validUntil,(short) 0x00, DATE_LEN);
 		Util.arrayCopy(bigStorage, (short) (SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN + EXPONENT_LEN + DATE_LEN + DATE_LEN), signature,(short) 0x00, SIGN_LEN);
 		
-		Arrays.fill(certificateWithoutSign, (byte) 0);
+		Util.arrayFillNonAtomic(certificateWithoutSign, SHORTZERO, (short) certificateWithoutSign.length, (byte) 0);
 		Util.arrayCopy(bigStorage, (short) 0, certificateWithoutSign, (short)0,(short) (SUBJECT_LEN + ISSUER_LEN + MODULUS_LEN + EXPONENT_LEN + DATE_LEN + DATE_LEN));
 		
 		
 		boolean verified = false;
 		boolean valid = false;
 		javacard.security.RSAPublicKey mainCaPublicKey = null;
-		try {
-			
+		// now we need to verify if the certificate is correct
+		mainCaPublicKey = (javacard.security.RSAPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_512, false);
+		mainCaPublicKey.setExponent(mainCAPublicExponent, (short) 0, (short) mainCAPublicExponent.length);
+		mainCaPublicKey.setModulus(mainCAPublicModulus, (short) 0, (short) mainCAPublicModulus.length);
+		javacard.security.Signature SPcheck = javacard.security.Signature.getInstance(javacard.security.Signature.ALG_RSA_SHA_PKCS1, false);
+		SPcheck.init( mainCaPublicKey, javacard.security.Signature.MODE_VERIFY);
+		verified = SPcheck.verify(certificateWithoutSign, (short) 0, (short) certificateWithoutSign.length, signature, (short) 0, (short)signature.length);
 
-			// now we need to verify if the certificate is correct
-			mainCaPublicKey = (javacard.security.RSAPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_512, false);
-			mainCaPublicKey.setExponent(mainCAPublicExponent, (short) 0, (short) mainCAPublicExponent.length);
-			mainCaPublicKey.setModulus(mainCAPublicModulus, (short) 0, (short) mainCAPublicModulus.length);
-			javacard.security.Signature SPcheck = javacard.security.Signature.getInstance(javacard.security.Signature.ALG_RSA_SHA_PKCS1, false);
-			SPcheck.init( mainCaPublicKey, javacard.security.Signature.MODE_VERIFY);
-			verified = SPcheck.verify(certificateWithoutSign, (short) 0, (short) certificateWithoutSign.length, signature, (short) 0, (short)signature.length);
-
-		    System.out.println("verified" + verified);
-			
-			
-			//we need to check if the current date is in between the validity period;
-			String[] validStart = getDateAsString(validFrom);
-			String[] validTo = getDateAsString(validUntil);
-			SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd-HH-mm");
-			//TODO
-			String lastValidationString = String.join("-", lastValidationTime);
-			String validFromString = String.join("-", validStart);
-			String validToString = String.join("-", validTo);
-			Date lastValidationDate = format.parse(lastValidationString);
-			Date validFromDate = format.parse(validFromString); 
-			Date validToDate = format.parse(validToString);
-			
-			if(lastValidationDate.after(validFromDate) && lastValidationDate.before(validToDate)) {
-			   valid = true;
-			}
-			System.out.println("valid" + valid);
-
+		System.out.println("verified" + verified);
 		
-		} catch (ParseException e) {
-			System.out.println("ParseException");
+
+		if((arrayCompare(lastValidationTimeBytes, SHORTZERO, validFrom, SHORTZERO, SIZE_OF_DATE) == 1) && (arrayCompare(validUntil, SHORTZERO, lastValidationTimeBytes, SHORTZERO, SIZE_OF_DATE) == 1)) {
+		   valid = true;
 		}
+		System.out.println("valid" + valid);
 
 		if (!(verified && valid)){
 			ISOException.throwIt(SW_CERT_VERIFICATIONR_OR_VALIDATION_FAILED);
@@ -498,7 +521,6 @@ public class IdentityCard extends Applet {
 			randomizer.generateData(challenge, (short) 0, (short) challenge.length);
 
 	// step 2.7
-			byte[] ivBytes = "0000111122223333".getBytes("UTF-8");
 		    javacardx.crypto.Cipher cipher = javacardx.crypto.Cipher.getInstance(javacardx.crypto.Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
 		    System.out.println(symKey.getSize());
 		    cipher.init(symKey, javacardx.crypto.Cipher.MODE_ENCRYPT, ivBytes, (short)0, (short)ivBytes.length);
@@ -548,18 +570,6 @@ public class IdentityCard extends Applet {
 		apdu.setOutgoing();
 		apdu.setOutgoingLength((short)response.length);
 		apdu.sendBytesLong(response,(short)0,(short)response.length);    
-		
-	}
-	
-	private String[] getDateAsString(byte[] dateAsByte){
-		String year = Integer.toString(dateAsByte[0] << 24 | (dateAsByte[1] & 0xFF) << 16 | (dateAsByte[2] & 0xFF) << 8 | (dateAsByte[3] & 0xFF));
-		String month = Integer.toString((int)dateAsByte[4]);
-		String day = Integer.toString((int)dateAsByte[5]);
-		String hour = Integer.toString((int)dateAsByte[6]);
-		String min = Integer.toString((int)dateAsByte[7]);
-		String[] timeString = {year,month,day,hour, min}; //THIS IS LIKE A NEW
-		
-		return timeString;
 		
 	}
 	
@@ -768,11 +778,6 @@ public class IdentityCard extends Applet {
 				}
 		// step 4.10
 
-				byte[] ivBytes = null;
-				try {
-					ivBytes = "0000111122223333".getBytes("UTF-8");
-				} catch (UnsupportedEncodingException e) {
-				}
 				javacardx.crypto.Cipher cipher = javacardx.crypto.Cipher.getInstance(javacardx.crypto.Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
 				cipher.init(symKey, javacardx.crypto.Cipher.MODE_ENCRYPT, ivBytes, (short)0, (short)ivBytes.length);
 
@@ -805,11 +810,6 @@ public class IdentityCard extends Applet {
 		// step 3.5
 			    javacardx.crypto.Cipher cipher = javacardx.crypto.Cipher.getInstance(javacardx.crypto.Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
 			    
-			    byte[] ivBytes = null;
-				try {
-					ivBytes = "0000111122223333".getBytes("UTF-8");
-				} catch (UnsupportedEncodingException e) {
-				}
 				cipher.init(symKey, javacardx.crypto.Cipher.MODE_DECRYPT, ivBytes, (short)0, (short)ivBytes.length);
 			    
 			    cipher.doFinal(aesEncryptBytes, (short) 0, (short) aesEncryptBytes.length, paddedChallenge, (short) 0);
@@ -871,12 +871,6 @@ public class IdentityCard extends Applet {
         System.out.println("WE TRYIN TO DELETE NEWS HERE BITCH: " + size);
 		Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA + 4), lenAndEncryptedPaddedChallenge,(short) 0, size);
 
-        byte[] ivBytes = null;
-		try {
-			ivBytes = "0000111122223333".getBytes("UTF-8");
-		} catch (UnsupportedEncodingException e) {
-			System.out.println("UnsupportedEncodingException");
-		}
 		javacardx.crypto.Cipher cipher = javacardx.crypto.Cipher.getInstance(javacardx.crypto.Cipher.ALG_AES_BLOCK_128_CBC_NOPAD, false);
 
 	    cipher.init(symKey, javacardx.crypto.Cipher.MODE_DECRYPT, ivBytes, (short)0, (short)ivBytes.length);

@@ -48,22 +48,7 @@ public class TimeService {
             switch (clientRequest) {
 				case REVALIDATION_REQUEST:
 	            	System.out.println("Answering to client");
-	            	DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd-HH-mm");
-	            	LocalDateTime now = LocalDateTime.now();
-					String outputTime = dtf.format(now);
-					String[] time = outputTime.split("-");
-					System.out.println(outputTime);
-					int[] intTime = new int[time.length];
-					for (int i = 0; i < intTime.length; i++) {
-						intTime[i] = Integer.parseInt(time[i]);
-					}
-					byte[] yearBytes = ByteBuffer.allocate(4).putInt(intTime[0]).array();
-					byte[] timeBytes = new byte[8];
-					System.arraycopy(yearBytes, 0, timeBytes, 0, 4);
-					for (int i = 4; i < timeBytes.length; i++) {
-						timeBytes[i] = (byte) intTime[i-3];
-					}
-
+	            	byte[] timeBytes = ByteBuffer.allocate(8).putLong(System.currentTimeMillis()).array();
 					MessageDigest md = MessageDigest.getInstance("SHA-256");
 
 					byte[] hashedTime = md.digest(timeBytes);

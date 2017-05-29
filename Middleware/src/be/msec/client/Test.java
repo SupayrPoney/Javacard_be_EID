@@ -67,8 +67,8 @@ public class Test {
 		keyStore.load(fis, "ThisIs4V3ryS4f3Pa$$w0rd".toCharArray());
 		fis.close();
 
-		String subject = "socnet2";
-		String issuer = "socnet";
+		String subject = "default1";
+		String issuer = "default";
 		
 		Certificate selfSignedCert = keyStore.getCertificate(subject);
 		RSAPublicKey pubKey = (RSAPublicKey) selfSignedCert.getPublicKey();
@@ -79,25 +79,8 @@ public class Test {
 		
 		
 		byte[] sign = null;
-		int[] fromDate = {2017, 01, 25, 9, 44};
-		int[] toDate = {2018, 01, 25, 9, 44};
-
-		byte[] validFromBytes = new byte[8];
-		byte[] yearBytes = ByteBuffer.allocate(4).putInt(new Integer(fromDate[0])).array();
-		System.arraycopy(yearBytes, 0, validFromBytes, 0, yearBytes.length);
-		validFromBytes[yearBytes.length] = (byte) (int) new Integer(fromDate[1]);
-		validFromBytes[yearBytes.length + 1] = (byte) fromDate[2];
-		validFromBytes[yearBytes.length + 2] = (byte) fromDate[3];
-		validFromBytes[yearBytes.length + 3] = (byte) fromDate[4];
-		
-
-		byte[] validUntilBytes = new byte[8];
-		byte[] yearTillBytes = ByteBuffer.allocate(4).putInt(new Integer(toDate[0])).array();
-		System.arraycopy(yearTillBytes, 0, validUntilBytes, 0, yearTillBytes.length);
-		validUntilBytes[yearTillBytes.length] = (byte) (int) new Integer(toDate[1]);
-		validUntilBytes[yearTillBytes.length + 1] = (byte) toDate[2];
-		validUntilBytes[yearTillBytes.length + 2] = (byte) toDate[3];
-		validUntilBytes[yearTillBytes.length + 3] = (byte) toDate[4];
+		byte[] validFromBytes = {0,0,1,89,-44,-53,-64,-128};
+		byte[] validUntilBytes = {0,0,1,97,44,124,-20,-128};
 		
 		byte[] subjectBytes = subject.getBytes();
 		byte[] issuerBytes = issuer.getBytes();
