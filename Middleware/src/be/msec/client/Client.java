@@ -82,6 +82,7 @@ public class Client {
 	private final static short SW_WRONG_PIN = 0x6308;
 
 	private final static short SIZE_OF_INT_IN_BYTES = 4;
+	static boolean simulation = true;
 	private static IConnection connectionWithJavacard;
 
 	
@@ -133,7 +134,7 @@ public class Client {
 			response = dataOut[0];			
 		}
 		boolean shouldContinue = true;
-		if (r.getSW() == 0x9000) {
+		if (r == null || r.getSW() == 0x9000) {
 			// authenticateSP
 			Socket clientSocketSP = new Socket("localhost", 9999);
 			DataOutputStream outToServer = new DataOutputStream(clientSocketSP.getOutputStream());
@@ -179,14 +180,14 @@ public class Client {
 			}
 			else{
 				shouldContinue = false;
-				JOptionPane.showMessageDialog(null, "The time verification failed.");
+				JOptionPane.showMessageDialog(null, "The certificate could not be verified.");
 				
 			}
 		}
 		else{
 			JOptionPane.showMessageDialog(null, "The time verification failed.");
 		}
-		if (r.getSW() == 0x9000 && shouldContinue) {
+		if (r == null || (r.getSW() == 0x9000 && shouldContinue)) {
 			//Step 3
 			Socket clientSocketSP = new Socket("localhost", 9999);
 			DataOutputStream outToServer = new DataOutputStream(clientSocketSP.getOutputStream());
@@ -423,9 +424,16 @@ public class Client {
 		byte[] dataIn = Arrays.copyOfRange(a.getBytes(), 0x05, 5 + 100); 
 		r = c.transmit(a);
 		System.out.println(r);
-
-		byte[] dataOut = Arrays.copyOfRange(r.getData(),(short) 5 + dataLen, 5 + dataLen+1); 
+		System.out.println(r.getData().length);
+		byte[] dataOut = null;
+		if (simulation) {
+			dataOut = Arrays.copyOfRange(r.getData(),(short) 5 + dataLen, 5 + dataLen+1); 
+		}
+		else{
+			dataOut = Arrays.copyOfRange(r.getData(),(short) 0, (short) 1); 
+		}
 		int response = dataOut[0];
+		System.out.println("RESPONSE: " + response);
 		if (response == 1) {
 			return false;
 		} else {
@@ -441,8 +449,7 @@ public class Client {
 	 * @param args
 	 */
 	public static void main(String[] args) throws Exception {
-		IConnection c;
-		boolean simulation = true;		// Choose simulation vs real card here
+		IConnection c;		// Choose simulation vs real card here
 
 		if (simulation) {
 			//Simulation:
